@@ -3,22 +3,34 @@ import logo from './logo.svg';
 import './App.css';
 
 function App() {
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState('Loading...');
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch('https://checkml.vercel.app/api/hello')
-      .then(response => response.json())
+    fetch('/api/hello')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
       .then(data => setMessage(data.message))
-      .catch(error => console.error('Error fetching data:', error));
+      .catch(error => {
+        console.error('Error fetching data:', error);
+        setError('Failed to fetch data from the API');
+        setMessage('');
+      });
   }, []);
 
   return (
     <div className="App">
       <header className="App-header">
         <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          {message || 'Loading...'}
-        </p>
+        {error ? (
+          <p style={{ color: 'red' }}>{error}</p>
+        ) : (
+          <p>{message}</p>
+        )}
         <p>
           Edit <code>src/App.js</code> and save to reload.
         </p>
