@@ -1,17 +1,13 @@
 from flask import Flask, jsonify
-import sys
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route('/api/hello', methods=['GET'])
 def hello():
-    print("Hello endpoint called", file=sys.stderr)
     return jsonify({"message": "Hello from Python backend!"})
 
-@app.route('/')
+@app.route('/api')
 def home():
-    print("Root endpoint called", file=sys.stderr)
     return "API is running"
-
-if __name__ == '__main__':
-    app.run(debug=True)
