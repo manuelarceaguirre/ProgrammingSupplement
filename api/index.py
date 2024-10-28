@@ -6,7 +6,7 @@ CORS(app)
 
 @app.route('/api/hello', methods=['GET'])
 def hello():
-    return jsonify({"message": "Hello from Python backend!"})
+    return jsonify({"message": "Michelle Te amo :)!"})
 
 @app.route('/api')
 def home():
