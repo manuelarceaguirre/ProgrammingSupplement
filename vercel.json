@@ -1,7 +1,5 @@
 {
 "version": 2,
-"buildCommand": "cd my-vercel-app && npm install && npm run build",
-"outputDirectory": "my-vercel-app/build",
 "builds": [
     {
     "src": "my-vercel-app/package.json",
@@ -28,5 +26,6 @@
     "src": "/(.*)",
     "dest": "my-vercel-app/build/$1"
     }
-]
+],
+"outputDirectory": "my-vercel-app/build"
 }
