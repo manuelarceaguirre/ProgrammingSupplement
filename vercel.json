@@ -2,19 +2,20 @@
 "version": 2,
 "builds": [
     {
-    "src": "package.json",
+    "src": "my-vercel-app/package.json",
     "use": "@vercel/static-build",
     "config": { 
-        "distDir": "build"
+        "distDir": "my-vercel-app/build",
+        "buildCommand": "cd my-vercel-app && npm install && npm run build"
     }
     },
     {
-    "src": "api/index.py",
+    "src": "my-vercel-app/api/index.py",
     "use": "@vercel/python"
     }
 ],
 "routes": [
-    { "src": "/api/(.*)", "dest": "/api/index.py" },
+    { "src": "/api/(.*)", "dest": "my-vercel-app/api/index.py" },
     { "src": "^/static/(.*)", "dest": "/static/$1" },
     { "src": ".*", "dest": "/index.html" }
 ]
