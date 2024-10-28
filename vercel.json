@@ -5,8 +5,9 @@
     "src": "my-vercel-app/package.json",
     "use": "@vercel/static-build",
     "config": { 
-        "distDir": "my-vercel-app/build",
-        "buildCommand": "cd my-vercel-app && npm install && npm run build"
+        "distDir": "build",
+        "buildCommand": "cd my-vercel-app && npm install && npm run build",
+        "outputDirectory": "my-vercel-app/build"
     }
     },
     {
@@ -24,7 +25,7 @@
     },
     {
     "src": "/(.*)",
-    "dest": "my-vercel-app/build/$1"
+    "dest": "/my-vercel-app/build/$1"
     }
 ],
 "outputDirectory": "my-vercel-app/build"
