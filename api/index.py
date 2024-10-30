@@ -1,57 +1,58 @@
-from flask import Flask, jsonify, request, make_response
+from flask import Flask, jsonify, request
 from flask_cors import CORS
-import os
-from werkzeug.utils import secure_filename
 import pandas as pd
 import numpy as np
 from scipy import stats
+import os
 
 app = Flask(__name__)
-CORS(app, resources={
-    r"/api/*": {
-        "origins": "*",
-        "methods": ["POST", "GET", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept"]
-    }
-})
+CORS(app)
 
 UPLOAD_FOLDER = '/tmp'
 ALLOWED_EXTENSIONS = {'csv'}
-MAX_CONTENT_LENGTH = 35 * 1024 * 1024  # Setting to 35MB to ensure 28.85MB files work
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
-
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def convert_to_native_types(obj):
-    if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
-        np.int16, np.int32, np.int64, np.uint8,
-        np.uint16, np.uint32, np.uint64)):
-        return int(obj)
-    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
-        return float(obj)
-    elif isinstance(obj, (np.bool_)):
-        return bool(obj)
-    elif isinstance(obj, dict):
-        return {key: convert_to_native_types(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_to_native_types(item) for item in obj]
-    return obj
+@app.route('/api/columns', methods=['POST', 'OPTIONS'])
+def get_columns():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type'}), 400
+    
+    try:
+        # Read the CSV file
+        df = pd.read_csv(file)
+        columns = df.columns.tolist()
+        
+        return jsonify({
+            'columns': columns,
+            'message': 'Columns retrieved successfully'
+        }), 200
+        
+    except Exception as e:
+        print(f"Error reading columns: {str(e)}")  # Add server-side logging
+        return jsonify({
+            'error': f'Error reading columns: {str(e)}'
+        }), 500
 
 @app.route('/api/upload', methods=['POST', 'OPTIONS'])
 def upload_file():
     if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Accept')
-        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
-        return response
-
+        return '', 204
+        
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
     
@@ -65,7 +66,10 @@ def upload_file():
         return jsonify({'error': 'Invalid file type'}), 400
     
     try:
+        # Read the CSV file
         df = pd.read_csv(file)
+        
+        # Calculate feature importances and drift scores
         feature_importances = calculate_feature_importance(df, target_column if target_column else None)
         drift_scores = calculate_drift(df)
         
@@ -74,8 +78,12 @@ def upload_file():
             'feature_importances': feature_importances,
             'drift_scores': drift_scores
         }), 200
+        
     except Exception as e:
-        return jsonify({'error': f'Processing error: {str(e)}'}), 500
+        print(f"Processing error: {str(e)}")  # Add server-side logging
+        return jsonify({
+            'error': f'Processing error: {str(e)}'
+        }), 500
 
 def calculate_feature_importance(df, target_column=None):
     importances = []
@@ -181,26 +189,6 @@ def calculate_drift(df):
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({"status": "healthy"}), 200, {'Content-Type': 'application/json'}
-
-@app.route('/api/columns', methods=['POST'])
-def get_columns():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type'}), 400
-    
-    try:
-        # Read just the column names
-        df = pd.read_csv(file, nrows=0)
-        columns = df.columns.tolist()
-        return jsonify({'columns': columns}), 200
-    except Exception as e:
-        return jsonify({'error': f'Error reading columns: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
