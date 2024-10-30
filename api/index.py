@@ -80,12 +80,13 @@ def calculate_feature_importance(df, target_column=None):
     importances = []
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     
+    # Filter out the target column from numeric_cols if it exists
+    if target_column:
+        numeric_cols = [col for col in numeric_cols if col != target_column]
+    
     for column in numeric_cols:
-        if column == target_column:
-            continue
-            
         if target_column and target_column in df.columns:
-            # Calculate correlation-based importance
+            # Calculate correlation-based importance with target
             correlation = abs(df[column].corr(df[target_column]))
             importance = correlation * 100
         else:
@@ -97,6 +98,7 @@ def calculate_feature_importance(df, target_column=None):
             "importance": float(min(max(importance, 0), 100))
         })
     
+    # Sort by importance and get top 5
     return sorted(importances, key=lambda x: x['importance'], reverse=True)[:5]
 
 def calculate_drift(df):
