@@ -13,9 +13,7 @@
         "use": "@vercel/python",
         "config": {
           "runtime": "python3.9",
-          "maxLambdaSize": "50mb",
-          "memory": 1024,
-          "maxDuration": 30
+          "maxLambdaSize": "50mb"
         }
       }
     ],
@@ -26,8 +24,10 @@
         "headers": {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type,Accept"
-        }
+          "Access-Control-Allow-Headers": "Content-Type,Accept",
+          "Access-Control-Max-Age": "86400"
+        },
+        "continue": true
       },
       {
         "handle": "filesystem"
@@ -36,5 +36,11 @@
         "src": "/(.*)",
         "dest": "/build/$1"
       }
-    ]
+    ],
+    "functions": {
+      "api/index.py": {
+        "memory": 1024,
+        "maxDuration": 10
+      }
+    }
   }

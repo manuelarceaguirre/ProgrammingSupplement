@@ -6,24 +6,20 @@ import pandas as pd
 import numpy as np
 
 app = Flask(__name__)
-CORS(app, resources={
-    r"/api/*": {
-        "origins": "*",
-        "methods": ["POST", "GET", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept"]
-    }
-})
+CORS(app)
 
+# Configure maximum content length (30MB)
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
 UPLOAD_FOLDER = '/tmp'
 ALLOWED_EXTENSIONS = {'csv'}
-MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 69MB limit
 
-# Ensure upload folder exists
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
+@app.before_request
+def before_request():
+    if request.content_length > app.config['MAX_CONTENT_LENGTH']:
+        return jsonify({'error': f'File too large. Maximum size is {app.config["MAX_CONTENT_LENGTH"] / (1024 * 1024)}MB'}), 413
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -49,9 +45,9 @@ def upload_file():
 
     # Check file size
     file_size = request.content_length
-    if file_size > MAX_CONTENT_LENGTH:
+    if file_size > app.config['MAX_CONTENT_LENGTH']:
         return jsonify({
-            'error': f'File size ({file_size / (1024 * 1024):.2f}MB) exceeds limit of 69MB'
+            'error': f'File size ({file_size / (1024 * 1024):.2f}MB) exceeds limit of 30MB'
         }), 413
 
     if file and allowed_file(file.filename):
