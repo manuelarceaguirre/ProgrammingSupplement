@@ -48,7 +48,7 @@ def process_file():
         for col in df.columns:
             if col != target_column and pd.api.types.is_numeric_dtype(df[col]):
                 try:
-                    corr = abs(df[col].corr(df[target_column]))
+                    corr = abs(df[col].astype(float).corr(df[target_column].astype(float)))
                     if not np.isnan(corr):
                         importances.append({
                             'feature': col,
@@ -63,8 +63,9 @@ def process_file():
         for col in df.columns:
             if pd.api.types.is_numeric_dtype(df[col]):
                 try:
-                    mean1 = float(df[col][:mid].mean())
-                    mean2 = float(df[col][mid:].mean())
+                    series = df[col].astype(float)
+                    mean1 = float(series[:mid].mean())
+                    mean2 = float(series[mid:].mean())
                     drift = abs(mean1 - mean2) / (abs(mean1) + 1e-10)
                     drifts.append({
                         'column': col,

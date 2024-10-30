@@ -12,6 +12,7 @@
         "src": "api/index.py",
         "use": "@vercel/python",
         "config": {
+          "runtime": "python3.12",
           "maxDuration": 10
         }
       }
