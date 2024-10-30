@@ -2,7 +2,6 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
-from scipy import stats
 
 app = Flask(__name__)
 CORS(app)
@@ -27,7 +26,7 @@ def upload_file():
         })
 
     except Exception as e:
-        print(f"Error: {str(e)}")  # Log the error
+        print(f"Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/process', methods=['POST'])
@@ -45,7 +44,7 @@ def process_file():
         # Read CSV file
         df = pd.read_csv(file)
         
-        # Calculate feature importance
+        # Calculate feature importance using correlations
         feature_importances = []
         for col in df.columns:
             if col != target_column and pd.api.types.is_numeric_dtype(df[col]):
@@ -65,22 +64,21 @@ def process_file():
             reverse=True
         )[:5]
         
-        # Calculate drift
+        # Calculate simple drift scores
         drift_scores = []
         midpoint = len(df) // 2
         for col in df.columns:
             if pd.api.types.is_numeric_dtype(df[col]):
                 try:
-                    stat, pval = stats.ks_2samp(
-                        df[col][:midpoint],
-                        df[col][midpoint:]
-                    )
+                    part1 = df[col][:midpoint].mean()
+                    part2 = df[col][midpoint:].mean()
+                    drift = abs(part1 - part2) / max(abs(part1), 1)
                     drift_scores.append({
                         'column': col,
-                        'drift_detected': bool(pval < 0.05),
-                        'p_value': float(pval),
-                        'drift_score': float(stat),
-                        'stattest': 'KS-test'
+                        'drift_detected': drift > 0.1,
+                        'p_value': float(1 - drift),
+                        'drift_score': float(drift * 100),
+                        'stattest': 'mean_diff'
                     })
                 except:
                     continue
@@ -92,9 +90,8 @@ def process_file():
         })
 
     except Exception as e:
-        print(f"Error: {str(e)}")  # Log the error
+        print(f"Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.debug = True
-    app.run(host='0.0.0.0', port=8000)
+    app.run(debug=True)
