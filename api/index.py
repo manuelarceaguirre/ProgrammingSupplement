@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 
 app = Flask(__name__)
 CORS(app)
@@ -38,59 +39,70 @@ def process_files():
         test_file = request.files['test_file']
         target_column = request.form.get('target_column')
         
-        if not target_column:
-            return jsonify({'error': 'No target column specified'}), 400
+        # Read CSVs in chunks
+        chunk_size = 10000  # Adjust based on your memory constraints
+        train_df = pd.read_csv(train_file, chunksize=chunk_size)
+        test_df = pd.read_csv(test_file, chunksize=chunk_size)
 
-        # Read CSV files
-        train_df = pd.read_csv(train_file)
-        test_df = pd.read_csv(test_file)
-
-        # Validate columns match
-        if not all(col in test_df.columns for col in train_df.columns):
+        # Process first chunk to validate columns and setup feature types
+        train_chunk = next(train_df)
+        test_chunk = next(test_df)
+        
+        if not all(col in test_chunk.columns for col in train_chunk.columns):
             return jsonify({'error': 'Train and test files have different columns'}), 400
 
-        # Calculate feature importance using correlation with target
-        importances = []
-        for col in train_df.columns:
-            if col != target_column and pd.api.types.is_numeric_dtype(train_df[col]):
-                try:
-                    corr = abs(train_df[col].astype(float).corr(train_df[target_column].astype(float)))
-                    if not np.isnan(corr):
-                        importances.append({
-                            'feature': col,
-                            'importance': float(corr * 100)
-                        })
-                except:
-                    continue
+        # Initialize drift monitor
+        monitor = MLDriftMonitor()
 
-        # Calculate drift between train and test
-        drifts = []
-        for col in train_df.columns:
-            if pd.api.types.is_numeric_dtype(train_df[col]):
-                try:
-                    train_mean = float(train_df[col].astype(float).mean())
-                    test_mean = float(test_df[col].astype(float).mean())
-                    train_std = float(train_df[col].astype(float).std())
-                    
-                    if train_std == 0:
-                        drift_score = 0
-                    else:
-                        drift_score = abs(train_mean - test_mean) / train_std
-                    
-                    drifts.append({
-                        'column': col,
-                        'drift_detected': drift_score > 0.3,  # Threshold for drift detection
-                        'drift_score': float(drift_score * 100),
-                        'p_value': float(1 / (1 + drift_score)),  # Simplified p-value calculation
-                        'stattest': 'mean_diff_normalized'
-                    })
-                except:
+        # Process only numeric and most important categorical columns
+        important_columns = set()
+        for col in train_chunk.columns:
+            if col == target_column:
+                important_columns.add(col)
+            elif pd.api.types.is_numeric_dtype(train_chunk[col]):
+                important_columns.add(col)
+            elif train_chunk[col].nunique() < 20:  # Only process categorical cols with few unique values
+                important_columns.add(col)
+
+        # Process chunks
+        results = defaultdict(list)
+        for train_chunk, test_chunk in zip(train_df, test_df):
+            train_chunk = train_chunk[list(important_columns)]
+            test_chunk = test_chunk[list(important_columns)]
+            
+            # Process each chunk
+            for col in important_columns:
+                if len(results[col]) >= 3:  # Limit samples per column
                     continue
+                    
+                if pd.api.types.is_numeric_dtype(train_chunk[col]):
+                    # Sample data to reduce computation
+                    train_sample = train_chunk[col].sample(min(1000, len(train_chunk)))
+                    test_sample = test_chunk[col].sample(min(1000, len(test_chunk)))
+                    
+                    result = monitor.ks_test(train_sample.values, test_sample.values)
+                    results[col].append(result)
+
+        # Average results across chunks
+        final_results = []
+        for col, chunk_results in results.items():
+            if not chunk_results:
+                continue
+                
+            avg_severity = np.mean([r['severity'] for r in chunk_results])
+            drift_detected = any(r['drift_detected'] for r in chunk_results)
+            
+            final_results.append({
+                'column': col,
+                'drift_detected': drift_detected,
+                'drift_score': float(avg_severity * 100),
+                'p_value': float(1 - avg_severity),
+                'stattest': 'numerical' if pd.api.types.is_numeric_dtype(train_chunk[col]) else 'categorical'
+            })
 
         return jsonify({
             'message': 'Success',
-            'feature_importances': sorted(importances, key=lambda x: x['importance'], reverse=True),
-            'drift_scores': drifts
+            'drift_scores': final_results
         })
 
     except Exception as e:
