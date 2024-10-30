@@ -27,6 +27,69 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def calculate_feature_importance(df):
+    importances = []
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    
+    # Calculate correlation with Credit_Score if it exists
+    target = 'Credit_Score' if 'Credit_Score' in df.columns else None
+    
+    for column in numeric_cols:
+        if column == target:
+            continue
+            
+        if target:
+            # Calculate correlation-based importance
+            correlation = abs(df[column].corr(df[target]))
+            importance = correlation * 100
+        else:
+            # If no target, use variance as importance
+            importance = (df[column].std() / df[column].mean() * 100) if df[column].mean() != 0 else 0
+            
+        importances.append({
+            "feature": column,
+            "importance": float(min(max(importance, 0), 100))  # Ensure between 0-100
+        })
+    
+    # Sort by importance and take top 5
+    return sorted(importances, key=lambda x: x['importance'], reverse=True)[:5]
+
+def calculate_drift(df):
+    drift_scores = []
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    
+    # Split data into two parts
+    mid_point = len(df) // 2
+    for column in numeric_cols:
+        part1 = df[column][:mid_point]
+        part2 = df[column][mid_point:]
+        
+        # Calculate basic statistics
+        mean_diff = abs(part1.mean() - part2.mean())
+        std_diff = abs(part1.std() - part2.std())
+        
+        # Normalize the differences
+        mean_norm = mean_diff / part1.mean() if part1.mean() != 0 else mean_diff
+        std_norm = std_diff / part1.std() if part1.std() != 0 else std_diff
+        
+        # Calculate drift score (0 to 1)
+        drift_score = (mean_norm + std_norm) / 2
+        
+        # Calculate p-value using simple distribution comparison
+        total_diff = abs(part1.mean() - part2.mean()) / (part1.std() + 1e-10)
+        p_value = 1 / (1 + np.exp(total_diff))  # Convert to probability-like score
+        
+        drift_scores.append({
+            "column": column,
+            "drift_detected": drift_score > 0.1,  # Threshold for drift detection
+            "p_value": float(p_value),
+            "stattest": "mean_std_comparison",
+            "drift_score": float(drift_score)
+        })
+    
+    # Sort by drift score and return top 3
+    return sorted(drift_scores, key=lambda x: x['drift_score'], reverse=True)[:3]
+
 @app.route('/api/upload', methods=['POST', 'OPTIONS'])
 def upload_file():
     # Handle preflight request
@@ -37,7 +100,6 @@ def upload_file():
         response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
         return response
 
-    # Set JSON content type for all responses
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400, {'Content-Type': 'application/json'}
     
@@ -55,7 +117,7 @@ def upload_file():
         
         try:
             # Read CSV in chunks to reduce memory usage
-            df = pd.read_csv(filepath, chunksize=1000).get_chunk()
+            df = pd.read_csv(filepath)
             feature_importances = calculate_feature_importance(df)
             drift_scores = calculate_drift(df)
             
