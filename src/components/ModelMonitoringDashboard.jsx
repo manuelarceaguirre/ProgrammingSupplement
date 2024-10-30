@@ -2,13 +2,6 @@ import React, { useState, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 const ModelMonitoringDashboard = () => {
   const [uploadStatus, setUploadStatus] = useState(null);
@@ -174,17 +167,16 @@ const ModelMonitoringDashboard = () => {
             {columns.length > 0 && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">Select Target Column (Optional)</label>
-                <Select onValueChange={handleTargetChange} value={selectedTarget}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a target column" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">No target (use variance-based importance)</SelectItem>
-                    {columns.map(column => (
-                      <SelectItem key={column} value={column}>{column}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <select
+                  value={selectedTarget}
+                  onChange={(e) => handleTargetChange(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">No target (use variance-based importance)</option>
+                  {columns.map(column => (
+                    <option key={column} value={column}>{column}</option>
+                  ))}
+                </select>
               </div>
             )}
 
