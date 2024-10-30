@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Alert, AlertTitle, AlertDescription } from '../components/ui/alert';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const ModelMonitoringDashboard = () => {
