@@ -9,6 +9,7 @@ function ModelMonitoringDashboard() {
   const [results, setResults] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [columns, setColumns] = useState([]);
 
   useEffect(() => {
     const loadInsuranceFiles = async () => {
@@ -28,6 +29,10 @@ function ModelMonitoringDashboard() {
 
         setTrainFile(defaultTrainFile);
         setTestFile(defaultTestFile);
+
+        const text = await trainBlob.text();
+        const headers = text.split('\n')[0].split(',');
+        setColumns(headers);
 
         const formData = new FormData();
         formData.append('train_file', defaultTrainFile);
@@ -60,24 +65,9 @@ function ModelMonitoringDashboard() {
       setResults(null);
       setError('');
       
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      try {
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        
-        const data = await response.json();
-        if (response.ok) {
-          setColumns(data.columns);
-        } else {
-          setError(data.error || 'Error uploading train file');
-        }
-      } catch (err) {
-        setError('Error uploading train file');
-      }
+      const text = await file.text();
+      const headers = text.split('\n')[0].split(',');
+      setColumns(headers);
     }
   };
 
@@ -252,27 +242,25 @@ function ModelMonitoringDashboard() {
           </div>
         </div>
 
-        {columns.length > 0 && (
-          <div className="target-selection">
-            <h3>Select Target Column</h3>
-            <select
-              value={targetColumn}
-              onChange={(e) => setTargetColumn(e.target.value)}
-              className="select"
-            >
-              <option value="">Select column...</option>
-              {columns.map((col) => (
-                <option key={col} value={col}>
-                  {col}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div className="target-selection">
+          <h3>Target Column</h3>
+          <select 
+            value={targetColumn}
+            onChange={(e) => setTargetColumn(e.target.value)}
+            className="select-input"
+          >
+            <option value="">Select target column</option>
+            {columns.map((col, index) => (
+              <option key={index} value={col}>
+                {col}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <button
           onClick={handleProcess}
-          disabled={loading || !trainFile || !testFile || !targetColumn}
+          disabled={!trainFile || !testFile || !targetColumn || loading}
           className="process-button"
         >
           {loading ? 'Processing...' : 'Process Files'}
