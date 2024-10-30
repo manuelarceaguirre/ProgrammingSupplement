@@ -1,25 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactApexChart from 'react-apexcharts';
 import './ModelMonitoringDashboard.css';
 
 function ModelMonitoringDashboard() {
   const [trainFile, setTrainFile] = useState(null);
   const [testFile, setTestFile] = useState(null);
-  const [columns, setColumns] = useState([]);
-  const [targetColumn, setTargetColumn] = useState('');
+  const [targetColumn, setTargetColumn] = useState('charges');
   const [results, setResults] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const loadInsuranceFiles = async () => {
+      try {
+        const trainResponse = await fetch('/insurance_train.csv');
+        const testResponse = await fetch('/insurance_test.csv');
+        
+        if (!trainResponse.ok || !testResponse.ok) {
+          throw new Error('Failed to load insurance files');
+        }
+
+        const trainBlob = await trainResponse.blob();
+        const testBlob = await testResponse.blob();
+
+        const defaultTrainFile = new File([trainBlob], 'insurance_train.csv', { type: 'text/csv' });
+        const defaultTestFile = new File([testBlob], 'insurance_test.csv', { type: 'text/csv' });
+
+        setTrainFile(defaultTrainFile);
+        setTestFile(defaultTestFile);
+
+        const formData = new FormData();
+        formData.append('train_file', defaultTrainFile);
+        formData.append('test_file', defaultTestFile);
+        formData.append('target_column', 'charges');
+
+        const response = await fetch('/api/process', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          setResults(data);
+        } else {
+          throw new Error(data.error || 'Error processing insurance files');
+        }
+      } catch (err) {
+        setError('Error loading insurance files: ' + err.message);
+      }
+    };
+
+    loadInsuranceFiles();
+  }, []);
 
   const handleTrainFileUpload = async (event) => {
     const file = event.target.files[0];
     if (file) {
       setTrainFile(file);
-      // Reset results when new file is uploaded
       setResults(null);
       setError('');
       
-      // Get columns from train file
       const formData = new FormData();
       formData.append('file', file);
       
