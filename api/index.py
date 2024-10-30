@@ -4,15 +4,15 @@ import os
 from werkzeug.utils import secure_filename
 import pandas as pd
 import numpy as np
-from scipy import stats
+from scipy.stats import ks_2samp  # Import only what we need
 
 app = Flask(__name__)
 CORS(app)
-#1
+
 # Configure upload settings
-UPLOAD_FOLDER = 'uploads'
+UPLOAD_FOLDER = '/tmp'  # Use /tmp for serverless
 ALLOWED_EXTENSIONS = {'csv'}
-MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB limit
+MAX_CONTENT_LENGTH = 15 * 1024 * 1024  # 15MB limit
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
@@ -24,11 +24,13 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def calculate_feature_importance(df):
-    # This is a simplified example - in real world, you might want to use
-    # actual ML model feature importances
     importances = []
-    for column in df.select_dtypes(include=[np.number]).columns:
-        importance = abs(df[column].corr(df['Credit_Score'])) if 'Credit_Score' in df.columns else np.random.rand()
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    for column in numeric_cols:
+        if 'Credit_Score' in df.columns:
+            importance = abs(df[column].corr(df['Credit_Score']))
+        else:
+            importance = np.random.rand()
         importances.append({
             "feature": column,
             "importance": float(importance * 100)
@@ -36,16 +38,14 @@ def calculate_feature_importance(df):
     return sorted(importances, key=lambda x: x['importance'], reverse=True)[:5]
 
 def calculate_drift(df):
-    # Simplified drift detection example
     drift_scores = []
-    for column in df.select_dtypes(include=[np.number]).columns:
-        # Split data in half to simulate reference and current datasets
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    for column in numeric_cols:
         mid = len(df) // 2
-        reference = df[column][:mid]
-        current = df[column][mid:]
+        reference = df[column][:mid].values
+        current = df[column][mid:].values
         
-        # Perform KS test
-        statistic, p_value = stats.ks_2samp(reference, current)
+        statistic, p_value = ks_2samp(reference, current)
         
         drift_scores.append({
             "column": column,
@@ -54,7 +54,7 @@ def calculate_drift(df):
             "stattest": "ks",
             "drift_score": float(statistic)
         })
-    return drift_scores[:3]  # Return top 3 drifting features
+    return drift_scores[:3]
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
@@ -70,30 +70,29 @@ def upload_file():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
-        # Process the uploaded file
         try:
             df = pd.read_csv(filepath)
             feature_importances = calculate_feature_importance(df)
             drift_scores = calculate_drift(df)
             
+            # Clean up the file after processing
+            os.remove(filepath)
+            
             return jsonify({
-                'message': 'File uploaded and processed successfully',
-                'filename': filename,
+                'message': 'File processed successfully',
                 'feature_importances': feature_importances,
                 'drift_scores': drift_scores
             }), 200
         except Exception as e:
-            return jsonify({'error': f'Error processing file: {str(e)}'}), 500
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return jsonify({'error': str(e)}), 500
     
     return jsonify({'error': 'Invalid file type'}), 400
 
-@app.route('/api/hello', methods=['GET'])
-def hello():
-    return jsonify({"message": "API is running!"})
-
-@app.route('/api')
-def home():
-    return "API is running"
+@app.route('/api/health', methods=['GET'])
+def health():
+    return jsonify({"status": "healthy"})
 
 if __name__ == '__main__':
     app.run(debug=True)
