@@ -3,6 +3,7 @@ from flask_cors import CORS
 import pandas as pd
 import numpy as np
 from collections import defaultdict
+from .drift_monitor import MLDriftMonitor
 
 app = Flask(__name__)
 CORS(app)
@@ -115,7 +116,16 @@ def process_files():
         })
 
     except Exception as e:
+        print(f"Error in process_files: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+# Error handler for 500 errors
+@app.errorhandler(500)
+def handle_500_error(e):
+    return jsonify({
+        'error': 'Internal server error',
+        'message': str(e)
+    }), 500
 
 if __name__ == '__main__':
     app.run()
