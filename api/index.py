@@ -10,7 +10,6 @@ CORS(app)
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     try:
-        # Check if file exists in request
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
 
@@ -21,30 +20,41 @@ def upload_file():
         # Read CSV file
         df = pd.read_csv(file)
         
-        # Get target column if provided
-        target_column = request.form.get('target_column', '')
-        
-        # If no target column, return columns list
-        if not target_column:
-            return jsonify({
-                'columns': df.columns.tolist(),
-                'message': 'Please select a target column'
-            })
+        # Return columns list initially
+        return jsonify({
+            'columns': df.columns.tolist(),
+            'message': 'Please select a target column'
+        })
 
-        # Process data with target column
-        feature_importances = []
-        drift_scores = []
+    except Exception as e:
+        print(f"Error: {str(e)}")  # Log the error
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/process', methods=['POST'])
+def process_file():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+
+        file = request.files['file']
+        target_column = request.form.get('target_column')
+        
+        if not target_column:
+            return jsonify({'error': 'No target column specified'}), 400
+
+        # Read CSV file
+        df = pd.read_csv(file)
         
         # Calculate feature importance
+        feature_importances = []
         for col in df.columns:
-            if col != target_column:
+            if col != target_column and pd.api.types.is_numeric_dtype(df[col]):
                 try:
-                    if pd.api.types.is_numeric_dtype(df[col]):
-                        corr = abs(df[col].corr(df[target_column]))
-                        feature_importances.append({
-                            'feature': col,
-                            'importance': float(corr * 100)
-                        })
+                    corr = abs(df[col].corr(df[target_column]))
+                    feature_importances.append({
+                        'feature': col,
+                        'importance': float(corr * 100)
+                    })
                 except:
                     continue
         
@@ -56,10 +66,11 @@ def upload_file():
         )[:5]
         
         # Calculate drift
+        drift_scores = []
         midpoint = len(df) // 2
         for col in df.columns:
-            try:
-                if pd.api.types.is_numeric_dtype(df[col]):
+            if pd.api.types.is_numeric_dtype(df[col]):
+                try:
                     stat, pval = stats.ks_2samp(
                         df[col][:midpoint],
                         df[col][midpoint:]
@@ -71,8 +82,8 @@ def upload_file():
                         'drift_score': float(stat),
                         'stattest': 'KS-test'
                     })
-            except:
-                continue
+                except:
+                    continue
 
         return jsonify({
             'message': 'Success',
@@ -81,7 +92,9 @@ def upload_file():
         })
 
     except Exception as e:
+        print(f"Error: {str(e)}")  # Log the error
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.debug = True
+    app.run(host='0.0.0.0', port=8000)

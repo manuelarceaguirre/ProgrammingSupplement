@@ -90,7 +90,7 @@ const ModelMonitoringDashboard = () => {
       formData.append('file', fileData);
       formData.append('target_column', value);
 
-      const response = await fetch('/api/upload', {
+      const response = await fetch('/api/process', {
         method: 'POST',
         body: formData
       });
