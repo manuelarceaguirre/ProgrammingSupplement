@@ -28,7 +28,7 @@ const ModelMonitoringDashboard = () => {
     console.log('File size:', file.size / (1024 * 1024), 'MB');
     console.log('File name:', file.name);
 
-    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB limit
+    const MAX_FILE_SIZE = 25 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
       setUploadStatus({
         type: 'error',
@@ -48,12 +48,18 @@ const ModelMonitoringDashboard = () => {
         body: formData
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+        const errorText = await response.text();
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.error || 'Upload failed');
+        } catch (e) {
+          throw new Error(`Upload failed: ${errorText}`);
+        }
       }
 
+      const data = await response.json();
+      
       if (data.columns) {
         setColumns(data.columns);
         setFileData(file);
@@ -89,11 +95,17 @@ const ModelMonitoringDashboard = () => {
         body: formData
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Processing failed');
+        const errorText = await response.text();
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.error || 'Processing failed');
+        } catch (e) {
+          throw new Error(`Processing failed: ${errorText}`);
+        }
       }
+
+      const data = await response.json();
 
       if (data.feature_importances && data.drift_scores) {
         setUploadStatus({
