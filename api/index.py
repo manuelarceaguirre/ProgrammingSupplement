@@ -6,23 +6,41 @@ import pandas as pd
 import numpy as np
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={
+    r"/api/*": {
+        "origins": "*",
+        "methods": ["POST", "GET", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Accept"]
+    }
+})
 
-# Configure maximum content length (30MB)
-app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
 UPLOAD_FOLDER = '/tmp'
 ALLOWED_EXTENSIONS = {'csv'}
+MAX_CONTENT_LENGTH = 35 * 1024 * 1024  # Setting to 35MB to ensure 28.85MB files work
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-@app.before_request
-def before_request():
-    if request.content_length > app.config['MAX_CONTENT_LENGTH']:
-        return jsonify({'error': f'File too large. Maximum size is {app.config["MAX_CONTENT_LENGTH"] / (1024 * 1024)}MB'}), 413
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def convert_to_native_types(obj):
+    if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+        np.int16, np.int32, np.int64, np.uint8,
+        np.uint16, np.uint32, np.uint64)):
+        return int(obj)
+    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, (np.bool_)):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_to_native_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_native_types(item) for item in obj]
+    return obj
 
 @app.route('/api/upload', methods=['POST', 'OPTIONS'])
 def upload_file():
@@ -33,54 +51,40 @@ def upload_file():
         response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
         return response
 
-    # Check if the post request has the file part
     if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-
+        return jsonify({'error': 'No file part'}), 400, {'Content-Type': 'application/json'}
+    
     file = request.files['file']
-    
-    # Check if a file was selected
     if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-
-    # Check file size
-    file_size = request.content_length
-    if file_size > app.config['MAX_CONTENT_LENGTH']:
-        return jsonify({
-            'error': f'File size ({file_size / (1024 * 1024):.2f}MB) exceeds limit of 30MB'
-        }), 413
-
-    if file and allowed_file(file.filename):
-        try:
-            filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            
-            try:
-                # Process the file
-                df = pd.read_csv(filepath)
-                feature_importances = calculate_feature_importance(df)
-                drift_scores = calculate_drift(df)
-                
-                # Clean up
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-                
-                return jsonify({
-                    'message': 'File processed successfully',
-                    'feature_importances': feature_importances,
-                    'drift_scores': drift_scores
-                }), 200
-                #1
-            except Exception as e:
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-                return jsonify({'error': f'Processing error: {str(e)}'}), 500
-                
-        except Exception as e:
-            return jsonify({'error': f'Upload error: {str(e)}'}), 500
+        return jsonify({'error': 'No selected file'}), 400, {'Content-Type': 'application/json'}
     
-    return jsonify({'error': 'Invalid file type'}), 400
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type'}), 400, {'Content-Type': 'application/json'}
+    
+    try:
+        # Read the file content directly into pandas without saving to disk
+        df = pd.read_csv(file)
+        
+        try:
+            # Process the dataframe
+            feature_importances = calculate_feature_importance(df)
+            drift_scores = calculate_drift(df)
+            
+            # Convert numpy types to native Python types
+            feature_importances = convert_to_native_types(feature_importances)
+            drift_scores = convert_to_native_types(drift_scores)
+            
+            return jsonify({
+                'message': 'File processed successfully',
+                'feature_importances': feature_importances,
+                'drift_scores': drift_scores
+            }), 200, {'Content-Type': 'application/json'}
+            
+        except Exception as e:
+            return jsonify({'error': f'Processing error: {str(e)}'}), 500, {'Content-Type': 'application/json'}
+            
+    except Exception as e:
+        return jsonify({'error': f'Upload error: {str(e)}'}), 500, {'Content-Type': 'application/json'}
 
 def calculate_feature_importance(df):
     importances = []
@@ -144,57 +148,6 @@ def calculate_drift(df):
     
     # Sort by drift score and return top 3
     return sorted(drift_scores, key=lambda x: x['drift_score'], reverse=True)[:3]
-
-@app.route('/api/upload', methods=['POST', 'OPTIONS'])
-def upload_file():
-    # Handle preflight request
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Accept')
-        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
-        return response
-
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400, {'Content-Type': 'application/json'}
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400, {'Content-Type': 'application/json'}
-    
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type'}), 400, {'Content-Type': 'application/json'}
-    
-    try:
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-        
-        try:
-            # Read CSV in chunks to reduce memory usage
-            df = pd.read_csv(filepath)
-            feature_importances = calculate_feature_importance(df)
-            drift_scores = calculate_drift(df)
-            
-            # Convert numpy types to native Python types
-            feature_importances = convert_to_native_types(feature_importances)
-            drift_scores = convert_to_native_types(drift_scores)
-            
-            os.remove(filepath)  # Clean up
-            
-            return jsonify({
-                'message': 'File processed successfully',
-                'feature_importances': feature_importances,
-                'drift_scores': drift_scores
-            }), 200, {'Content-Type': 'application/json'}
-            
-        except Exception as e:
-            if os.path.exists(filepath):
-                os.remove(filepath)
-            return jsonify({'error': f'Processing error: {str(e)}'}), 500, {'Content-Type': 'application/json'}
-            
-    except Exception as e:
-        return jsonify({'error': f'Upload error: {str(e)}'}), 500, {'Content-Type': 'application/json'}
 
 @app.route('/api/health', methods=['GET'])
 def health():
