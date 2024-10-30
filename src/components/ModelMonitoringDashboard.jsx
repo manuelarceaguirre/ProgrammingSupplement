@@ -15,11 +15,16 @@ const ModelMonitoringDashboard = () => {
     const file = event.target.files[0];
     if (!file) return;
 
+    // Log file details for debugging
+    console.log('File size:', file.size / (1024 * 1024), 'MB');
+    console.log('File name:', file.name);
+
     // Check file size before uploading (69MB limit)
-    if (file.size > 69 * 1024 * 1024) {
+    const MAX_FILE_SIZE = 69 * 1024 * 1024; // 69MB in bytes
+    if (file.size > MAX_FILE_SIZE) {
       setUploadStatus({
         type: 'error',
-        message: 'File size exceeds 69MB limit'
+        message: `File size (${(file.size / (1024 * 1024)).toFixed(2)}MB) exceeds 69MB limit`
       });
       return;
     }
@@ -37,15 +42,20 @@ const ModelMonitoringDashboard = () => {
         body: formData,
       });
       
+      // Log response status and headers for debugging
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
       let data;
       try {
         data = await response.json();
       } catch (e) {
+        console.error('JSON parse error:', e);
         throw new Error('Failed to parse server response');
       }
 
       if (response.status === 413) {
-        throw new Error('File size too large (maximum 69MB)');
+        throw new Error(`File size too large (maximum 69MB). File size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
       }
       
       if (!response.ok) {
