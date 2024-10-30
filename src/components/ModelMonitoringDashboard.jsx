@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Alert, AlertTitle, AlertDescription } from './ui/alert';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const ModelMonitoringDashboard = () => {
   const [uploadStatus, setUploadStatus] = useState(null);
@@ -10,13 +11,19 @@ const ModelMonitoringDashboard = () => {
   ]);
   const [driftScores, setDriftScores] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [columns, setColumns] = useState([]);
+  const [selectedTarget, setSelectedTarget] = useState('');
+  const [fileData, setFileData] = useState(null);
 
   const handleFileUpload = useCallback(async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Reset file input
+    // Reset file input and states
     event.target.value = '';
+    setColumns([]);
+    setSelectedTarget('');
+    setFileData(null);
 
     // Use requestIdleCallback for file size check
     window.requestIdleCallback(() => {
@@ -32,29 +39,59 @@ const ModelMonitoringDashboard = () => {
         return;
       }
 
-      // Process file upload in a non-blocking way
-      processFileUpload(file);
+      // Get columns first
+      getFileColumns(file);
     });
   }, []);
 
-  const processFileUpload = async (file) => {
+  const getFileColumns = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/columns', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get columns');
+      }
+
+      const data = await response.json();
+      setColumns(data.columns);
+      setFileData(file);
+      setUploadStatus({
+        type: 'info',
+        message: 'Please select a target column'
+      });
+    } catch (error) {
+      console.error('Column fetch error:', error);
+      setUploadStatus({
+        type: 'error',
+        message: error.message || 'Failed to read file columns'
+      });
+    }
+  };
+
+  const processFileUpload = async () => {
+    if (!fileData) return;
+
     setIsLoading(true);
     setUploadStatus(null);
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', fileData);
+      formData.append('target_column', selectedTarget);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
         signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-        },
       });
 
       clearTimeout(timeoutId);
@@ -96,6 +133,13 @@ const ModelMonitoringDashboard = () => {
     }
   };
 
+  const handleTargetChange = (value) => {
+    setSelectedTarget(value);
+    if (value && fileData) {
+      processFileUpload();
+    }
+  };
+
   return (
     <div className="space-y-6 p-4">
       <h1 className="text-2xl font-bold mb-4">Credit Score Model Monitoring Dashboard</h1>
@@ -120,6 +164,24 @@ const ModelMonitoringDashboard = () => {
                 hover:file:bg-violet-100
                 disabled:opacity-50 disabled:cursor-not-allowed"
             />
+            
+            {columns.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Select Target Column (Optional)</label>
+                <Select onValueChange={handleTargetChange} value={selectedTarget}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a target column" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No target (use variance-based importance)</SelectItem>
+                    {columns.map(column => (
+                      <SelectItem key={column} value={column}>{column}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {isLoading && (
               <Alert>
                 <AlertTitle>Processing file...</AlertTitle>
@@ -127,7 +189,11 @@ const ModelMonitoringDashboard = () => {
               </Alert>
             )}
             {uploadStatus && !isLoading && (
-              <Alert className={uploadStatus.type === 'success' ? 'border-green-400' : 'border-red-400'}>
+              <Alert className={
+                uploadStatus.type === 'success' ? 'border-green-400' : 
+                uploadStatus.type === 'info' ? 'border-blue-400' : 
+                'border-red-400'
+              }>
                 <AlertTitle>{uploadStatus.message}</AlertTitle>
               </Alert>
             )}

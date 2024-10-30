@@ -52,54 +52,41 @@ def upload_file():
         return response
 
     if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400, {'Content-Type': 'application/json'}
+        return jsonify({'error': 'No file part'}), 400
     
     file = request.files['file']
+    target_column = request.form.get('target_column', '')
+    
     if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400, {'Content-Type': 'application/json'}
+        return jsonify({'error': 'No selected file'}), 400
     
     if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type'}), 400, {'Content-Type': 'application/json'}
+        return jsonify({'error': 'Invalid file type'}), 400
     
     try:
-        # Read the file content directly into pandas without saving to disk
         df = pd.read_csv(file)
+        feature_importances = calculate_feature_importance(df, target_column if target_column else None)
+        drift_scores = calculate_drift(df)
         
-        try:
-            # Process the dataframe
-            feature_importances = calculate_feature_importance(df)
-            drift_scores = calculate_drift(df)
-            
-            # Convert numpy types to native Python types
-            feature_importances = convert_to_native_types(feature_importances)
-            drift_scores = convert_to_native_types(drift_scores)
-            
-            return jsonify({
-                'message': 'File processed successfully',
-                'feature_importances': feature_importances,
-                'drift_scores': drift_scores
-            }), 200, {'Content-Type': 'application/json'}
-            
-        except Exception as e:
-            return jsonify({'error': f'Processing error: {str(e)}'}), 500, {'Content-Type': 'application/json'}
-            
+        return jsonify({
+            'message': 'File processed successfully',
+            'feature_importances': feature_importances,
+            'drift_scores': drift_scores
+        }), 200
     except Exception as e:
-        return jsonify({'error': f'Upload error: {str(e)}'}), 500, {'Content-Type': 'application/json'}
+        return jsonify({'error': f'Processing error: {str(e)}'}), 500
 
-def calculate_feature_importance(df):
+def calculate_feature_importance(df, target_column=None):
     importances = []
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     
-    # Calculate correlation with Credit_Score if it exists
-    target = 'Credit_Score' if 'Credit_Score' in df.columns else None
-    
     for column in numeric_cols:
-        if column == target:
+        if column == target_column:
             continue
             
-        if target:
+        if target_column and target_column in df.columns:
             # Calculate correlation-based importance
-            correlation = abs(df[column].corr(df[target]))
+            correlation = abs(df[column].corr(df[target_column]))
             importance = correlation * 100
         else:
             # If no target, use variance as importance
@@ -107,10 +94,9 @@ def calculate_feature_importance(df):
             
         importances.append({
             "feature": str(column),
-            "importance": float(min(max(importance, 0), 100))  # Ensure between 0-100
+            "importance": float(min(max(importance, 0), 100))
         })
     
-    # Sort by importance and take top 5
     return sorted(importances, key=lambda x: x['importance'], reverse=True)[:5]
 
 def calculate_drift(df):
@@ -152,6 +138,26 @@ def calculate_drift(df):
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({"status": "healthy"}), 200, {'Content-Type': 'application/json'}
+
+@app.route('/api/columns', methods=['POST'])
+def get_columns():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type'}), 400
+    
+    try:
+        # Read just the column names
+        df = pd.read_csv(file, nrows=0)
+        columns = df.columns.tolist()
+        return jsonify({'columns': columns}), 200
+    except Exception as e:
+        return jsonify({'error': f'Error reading columns: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
