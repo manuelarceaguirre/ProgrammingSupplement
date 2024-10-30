@@ -18,12 +18,21 @@ const ModelMonitoringDashboard = () => {
     formData.append('file', file);
 
     try {
-      // Using relative path for API endpoint
+      // Add headers to specify we expect JSON response
       const response = await fetch('/api/upload', {
         method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+        },
         body: formData,
       });
       
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned non-JSON response");
+      }
+
       const data = await response.json();
       console.log('Response:', data); // Debug logging
       
