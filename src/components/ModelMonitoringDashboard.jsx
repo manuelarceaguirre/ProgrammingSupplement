@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Alert, AlertTitle, AlertDescription } from './ui/alert';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -11,59 +11,70 @@ const ModelMonitoringDashboard = () => {
   const [driftScores, setDriftScores] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleFileUpload = async (event) => {
+  const handleFileUpload = useCallback(async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Log file details for debugging
-    console.log('File size:', file.size / (1024 * 1024), 'MB');
-    console.log('File name:', file.name);
+    // Reset file input
+    event.target.value = '';
 
-    // Check file size before uploading (30MB limit)
-    const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB in bytes
-    if (file.size > MAX_FILE_SIZE) {
-      setUploadStatus({
-        type: 'error',
-        message: `File size (${(file.size / (1024 * 1024)).toFixed(2)}MB) exceeds 30MB limit`
-      });
-      return;
-    }
+    // Use requestIdleCallback for file size check
+    window.requestIdleCallback(() => {
+      console.log('File size:', file.size / (1024 * 1024), 'MB');
+      console.log('File name:', file.name);
 
+      const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB limit
+      if (file.size > MAX_FILE_SIZE) {
+        setUploadStatus({
+          type: 'error',
+          message: `File size (${(file.size / (1024 * 1024)).toFixed(2)}MB) exceeds 25MB limit`
+        });
+        return;
+      }
+
+      // Process file upload in a non-blocking way
+      processFileUpload(file);
+    });
+  }, []);
+
+  const processFileUpload = async (file) => {
     setIsLoading(true);
-    const formData = new FormData();
-    formData.append('file', file);
+    setUploadStatus(null);
 
     try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       const response = await fetch('/api/upload', {
         method: 'POST',
+        body: formData,
+        signal: controller.signal,
         headers: {
           'Accept': 'application/json',
         },
-        body: formData,
       });
-      
-      // Log response status and headers for debugging
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
-      let data;
-      try {
-        data = await response.json();
-      } catch (e) {
-        console.error('JSON parse error:', e);
-        throw new Error('Failed to parse server response');
-      }
+      clearTimeout(timeoutId);
 
       if (response.status === 413) {
-        throw new Error(`File size too large (maximum 30MB). File size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
-      }
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+        throw new Error(`File size too large. Maximum size is 25MB`);
       }
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+
+      const data = await response.json();
+
       if (data.feature_importances && data.drift_scores) {
-        setUploadStatus({ type: 'success', message: data.message || 'File processed successfully' });
+        setUploadStatus({ 
+          type: 'success', 
+          message: data.message || 'File processed successfully' 
+        });
         setFeatureImportances(data.feature_importances);
         setDriftScores(data.drift_scores);
       } else {
@@ -75,8 +86,10 @@ const ModelMonitoringDashboard = () => {
         type: 'error', 
         message: error.message || 'Unknown error occurred'
       });
-      // Reset data on error
-      setFeatureImportances([{ feature: "Upload a CSV file to see feature importances", importance: 0 }]);
+      setFeatureImportances([{ 
+        feature: "Upload a CSV file to see feature importances", 
+        importance: 0 
+      }]);
       setDriftScores([]);
     } finally {
       setIsLoading(false);
@@ -110,6 +123,7 @@ const ModelMonitoringDashboard = () => {
             {isLoading && (
               <Alert>
                 <AlertTitle>Processing file...</AlertTitle>
+                <AlertDescription>This may take a few moments</AlertDescription>
               </Alert>
             )}
             {uploadStatus && !isLoading && (
@@ -118,7 +132,7 @@ const ModelMonitoringDashboard = () => {
               </Alert>
             )}
             <p className="text-sm text-gray-500">
-              Maximum file size: 30MB. Only CSV files are accepted.
+              Maximum file size: 25MB. Only CSV files are accepted.
             </p>
           </div>
         </CardContent>
