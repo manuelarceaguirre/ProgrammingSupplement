@@ -66,10 +66,12 @@ def process_files():
             pd.read_csv(train_file, chunksize=chunk_size),
             pd.read_csv(test_file, chunksize=chunk_size)
         ):
-            # Sample data if chunks are too large
-            if len(train_chunk) > 1000:
-                train_chunk = train_chunk.sample(n=1000)
-                test_chunk = test_chunk.sample(n=1000)
+            # Sample data if chunks are too large, but don't sample more than available
+            sample_size = min(1000, len(train_chunk), len(test_chunk))
+            if sample_size < len(train_chunk):
+                train_chunk = train_chunk.sample(n=sample_size, random_state=42)
+            if sample_size < len(test_chunk):
+                test_chunk = test_chunk.sample(n=sample_size, random_state=42)
 
             chunk_results = monitor.detect_drift(train_chunk, test_chunk, feature_types)
             
@@ -82,6 +84,9 @@ def process_files():
         # Average results across chunks
         final_results = []
         for feature, chunk_results in results.items():
+            if not chunk_results:  # Skip if no results for this feature
+                continue
+                
             avg_severity = np.mean([r['severity'] for r in chunk_results])
             avg_statistic = np.mean([r['statistic'] for r in chunk_results])
             drift_detected = any(r['drift_detected'] for r in chunk_results)
@@ -116,7 +121,10 @@ def process_files():
         })
 
     except Exception as e:
-        print(f"Error in process_files: {str(e)}")
+        print(f"Error in process_files: {str(e)}")  # Debug log
+        print(f"Error type: {type(e)}")  # Debug log
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")  # Full error traceback
         return jsonify({'error': str(e)}), 500
 
 # Error handler for 500 errors
