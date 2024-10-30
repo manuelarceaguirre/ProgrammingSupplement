@@ -9,16 +9,26 @@ const ModelMonitoringDashboard = () => {
     { feature: "Upload a CSV file to see feature importances", importance: 0 }
   ]);
   const [driftScores, setDriftScores] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
+    // Check file size before uploading (15MB limit)
+    if (file.size > 15 * 1024 * 1024) {
+      setUploadStatus({
+        type: 'error',
+        message: 'File size exceeds 15MB limit'
+      });
+      return;
+    }
+
+    setIsLoading(true);
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      // Add headers to specify we expect JSON response
       const response = await fetch('/api/upload', {
         method: 'POST',
         headers: {
@@ -27,31 +37,39 @@ const ModelMonitoringDashboard = () => {
         body: formData,
       });
       
-      // Check if response is JSON
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Server returned non-JSON response");
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        throw new Error('Failed to parse server response');
       }
 
-      const data = await response.json();
-      console.log('Response:', data); // Debug logging
+      if (response.status === 413) {
+        throw new Error('File size too large (maximum 15MB)');
+      }
       
-      if (response.ok) {
-        setUploadStatus({ type: 'success', message: data.message });
+      if (!response.ok) {
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      if (data.feature_importances && data.drift_scores) {
+        setUploadStatus({ type: 'success', message: data.message || 'File processed successfully' });
         setFeatureImportances(data.feature_importances);
         setDriftScores(data.drift_scores);
       } else {
-        setUploadStatus({ 
-          type: 'error', 
-          message: data.error || 'Upload failed' 
-        });
+        throw new Error('Invalid response format from server');
       }
     } catch (error) {
-      console.error('Upload error:', error); // Debug logging
+      console.error('Upload error:', error);
       setUploadStatus({ 
         type: 'error', 
-        message: `Upload failed: ${error.message || 'Unknown error'}`
+        message: error.message || 'Unknown error occurred'
       });
+      // Reset data on error
+      setFeatureImportances([{ feature: "Upload a CSV file to see feature importances", importance: 0 }]);
+      setDriftScores([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -70,14 +88,21 @@ const ModelMonitoringDashboard = () => {
               type="file"
               accept=".csv"
               onChange={handleFileUpload}
+              disabled={isLoading}
               className="block w-full text-sm text-slate-500
                 file:mr-4 file:py-2 file:px-4
                 file:rounded-full file:border-0
                 file:text-sm file:font-semibold
                 file:bg-violet-50 file:text-violet-700
-                hover:file:bg-violet-100"
+                hover:file:bg-violet-100
+                disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            {uploadStatus && (
+            {isLoading && (
+              <Alert>
+                <AlertTitle>Processing file...</AlertTitle>
+              </Alert>
+            )}
+            {uploadStatus && !isLoading && (
               <Alert className={uploadStatus.type === 'success' ? 'border-green-400' : 'border-red-400'}>
                 <AlertTitle>{uploadStatus.message}</AlertTitle>
               </Alert>
