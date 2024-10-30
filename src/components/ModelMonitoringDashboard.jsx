@@ -126,6 +126,19 @@ const ModelMonitoringDashboard = () => {
     }
   };
 
+  // Chart configuration
+  const chartOptions = {
+    theme: {
+      mode: 'dark',
+      palette: 'palette8',
+    },
+    chart: {
+      background: 'var(--bg-secondary)',
+      foreColor: 'var(--text-primary)',
+    },
+    // ... rest of your chart options
+  };
+
   return (
     <div className="space-y-6 p-4">
       <h1 className="text-2xl font-bold mb-4">Credit Score Model Monitoring Dashboard</h1>
