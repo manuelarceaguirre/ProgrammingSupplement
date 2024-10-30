@@ -18,124 +18,99 @@ const ModelMonitoringDashboard = () => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Reset file input and states
+    // Reset states
     event.target.value = '';
     setColumns([]);
     setSelectedTarget('');
-    setFileData(null);
+    setFeatureImportances([{ feature: "Upload a CSV file to see feature importances", importance: 0 }]);
+    setDriftScores([]);
 
-    // Use requestIdleCallback for file size check
-    window.requestIdleCallback(() => {
-      console.log('File size:', file.size / (1024 * 1024), 'MB');
-      console.log('File name:', file.name);
+    console.log('File size:', file.size / (1024 * 1024), 'MB');
+    console.log('File name:', file.name);
 
-      const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB limit
-      if (file.size > MAX_FILE_SIZE) {
-        setUploadStatus({
-          type: 'error',
-          message: `File size (${(file.size / (1024 * 1024)).toFixed(2)}MB) exceeds 25MB limit`
-        });
-        return;
-      }
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB limit
+    if (file.size > MAX_FILE_SIZE) {
+      setUploadStatus({
+        type: 'error',
+        message: `File size (${(file.size / (1024 * 1024)).toFixed(2)}MB) exceeds 25MB limit`
+      });
+      return;
+    }
 
-      // Get columns first
-      getFileColumns(file);
-    });
-  }, []);
-
-  const getFileColumns = async (file) => {
+    setIsLoading(true);
+    
     try {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/columns', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get columns');
-      }
-
-      const data = await response.json();
-      setColumns(data.columns);
-      setFileData(file);
-      setUploadStatus({
-        type: 'info',
-        message: 'Please select a target column'
-      });
-    } catch (error) {
-      console.error('Column fetch error:', error);
-      setUploadStatus({
-        type: 'error',
-        message: error.message || 'Failed to read file columns'
-      });
-    }
-  };
-
-  const processFileUpload = async () => {
-    if (!fileData) return;
-
-    setIsLoading(true);
-    setUploadStatus(null);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', fileData);
-      formData.append('target_column', selectedTarget);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-
       const response = await fetch('/api/upload', {
         method: 'POST',
-        body: formData,
-        signal: controller.signal,
+        body: formData
       });
-
-      clearTimeout(timeoutId);
-
-      if (response.status === 413) {
-        throw new Error(`File size too large. Maximum size is 25MB`);
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Upload failed');
-      }
 
       const data = await response.json();
 
-      if (data.feature_importances && data.drift_scores) {
-        setUploadStatus({ 
-          type: 'success', 
-          message: data.message || 'File processed successfully' 
+      if (!response.ok) {
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      if (data.columns) {
+        setColumns(data.columns);
+        setFileData(file);
+        setUploadStatus({
+          type: 'info',
+          message: data.message || 'Please select a target column'
         });
-        setFeatureImportances(data.feature_importances);
-        setDriftScores(data.drift_scores);
-      } else {
-        throw new Error('Invalid response format from server');
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setUploadStatus({ 
-        type: 'error', 
-        message: error.message || 'Unknown error occurred'
+      setUploadStatus({
+        type: 'error',
+        message: error.message || 'Failed to process file'
       });
-      setFeatureImportances([{ 
-        feature: "Upload a CSV file to see feature importances", 
-        importance: 0 
-      }]);
-      setDriftScores([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const handleTargetChange = (value) => {
+  const handleTargetChange = async (value) => {
     setSelectedTarget(value);
-    if (value && fileData) {
-      processFileUpload();
+    if (!value || !fileData) return;
+
+    setIsLoading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', fileData);
+      formData.append('target_column', value);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Processing failed');
+      }
+
+      if (data.feature_importances && data.drift_scores) {
+        setUploadStatus({
+          type: 'success',
+          message: data.message || 'File processed successfully'
+        });
+        setFeatureImportances(data.feature_importances);
+        setDriftScores(data.drift_scores);
+      }
+    } catch (error) {
+      console.error('Processing error:', error);
+      setUploadStatus({
+        type: 'error',
+        message: error.message || 'Failed to process file'
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 

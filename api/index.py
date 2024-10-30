@@ -8,46 +8,6 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-UPLOAD_FOLDER = '/tmp'
-ALLOWED_EXTENSIONS = {'csv'}
-
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@app.route('/api/columns', methods=['POST', 'OPTIONS'])
-def get_columns():
-    if request.method == 'OPTIONS':
-        return '', 204
-        
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type'}), 400
-    
-    try:
-        # Read the CSV file
-        df = pd.read_csv(file)
-        columns = df.columns.tolist()
-        
-        return jsonify({
-            'columns': columns,
-            'message': 'Columns retrieved successfully'
-        }), 200
-        
-    except Exception as e:
-        print(f"Error reading columns: {str(e)}")  # Add server-side logging
-        return jsonify({
-            'error': f'Error reading columns: {str(e)}'
-        }), 500
-
 @app.route('/api/upload', methods=['POST', 'OPTIONS'])
 def upload_file():
     if request.method == 'OPTIONS':
@@ -62,15 +22,19 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type'}), 400
-    
     try:
         # Read the CSV file
         df = pd.read_csv(file)
         
+        # If no target column specified, just return the columns
+        if not target_column:
+            return jsonify({
+                'columns': df.columns.tolist(),
+                'message': 'Please select a target column'
+            }), 200
+        
         # Calculate feature importances and drift scores
-        feature_importances = calculate_feature_importance(df, target_column if target_column else None)
+        feature_importances = calculate_feature_importance(df, target_column)
         drift_scores = calculate_drift(df)
         
         return jsonify({
@@ -80,10 +44,8 @@ def upload_file():
         }), 200
         
     except Exception as e:
-        print(f"Processing error: {str(e)}")  # Add server-side logging
-        return jsonify({
-            'error': f'Processing error: {str(e)}'
-        }), 500
+        print(f"Error: {str(e)}")  # Server-side logging
+        return jsonify({'error': str(e)}), 500
 
 def calculate_feature_importance(df, target_column=None):
     importances = []
