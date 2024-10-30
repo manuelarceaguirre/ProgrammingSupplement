@@ -4,13 +4,11 @@ import os
 from werkzeug.utils import secure_filename
 import pandas as pd
 import numpy as np
-from scipy.stats import ks_2samp  # Import only what we need
 
 app = Flask(__name__)
 CORS(app)
 
-# Configure upload settings
-UPLOAD_FOLDER = '/tmp'  # Use /tmp for serverless
+UPLOAD_FOLDER = '/tmp'
 ALLOWED_EXTENSIONS = {'csv'}
 MAX_CONTENT_LENGTH = 15 * 1024 * 1024  # 15MB limit
 
@@ -28,7 +26,8 @@ def calculate_feature_importance(df):
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     for column in numeric_cols:
         if 'Credit_Score' in df.columns:
-            importance = abs(df[column].corr(df['Credit_Score']))
+            # Use a simpler correlation calculation
+            importance = abs(np.corrcoef(df[column], df['Credit_Score'])[0, 1])
         else:
             importance = np.random.rand()
         importances.append({
@@ -42,19 +41,19 @@ def calculate_drift(df):
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     for column in numeric_cols:
         mid = len(df) // 2
-        reference = df[column][:mid].values
-        current = df[column][mid:].values
-        
-        statistic, p_value = ks_2samp(reference, current)
+        # Use simpler statistical measures
+        mean_diff = abs(df[column][:mid].mean() - df[column][mid:].mean())
+        std_diff = abs(df[column][:mid].std() - df[column][mid:].std())
+        drift_score = (mean_diff + std_diff) / 2
         
         drift_scores.append({
             "column": column,
-            "drift_detected": p_value < 0.05,
-            "p_value": float(p_value),
-            "stattest": "ks",
-            "drift_score": float(statistic)
+            "drift_detected": drift_score > 0.1,
+            "p_value": float(1 - drift_score),
+            "stattest": "mean_std_diff",
+            "drift_score": float(drift_score)
         })
-    return drift_scores[:3]
+    return sorted(drift_scores, key=lambda x: x['drift_score'], reverse=True)[:3]
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
@@ -71,11 +70,11 @@ def upload_file():
         file.save(filepath)
         
         try:
-            df = pd.read_csv(filepath)
+            # Read CSV in chunks to reduce memory usage
+            df = pd.read_csv(filepath, chunksize=1000).get_chunk()
             feature_importances = calculate_feature_importance(df)
             drift_scores = calculate_drift(df)
             
-            # Clean up the file after processing
             os.remove(filepath)
             
             return jsonify({

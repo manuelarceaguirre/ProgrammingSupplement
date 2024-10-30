@@ -13,7 +13,7 @@
         "use": "@vercel/python",
         "config": {
           "runtime": "python3.9",
-          "maxLambdaSize": "15mb"
+          "maxLambdaSize": "10mb"
         }
       }
     ],
