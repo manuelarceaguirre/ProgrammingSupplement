@@ -1,8 +1,14 @@
 import React, { useState, useCallback } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
-import { Alert, AlertTitle, AlertDescription } from './ui/alert';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const ModelMonitoringDashboard = () => {
   const [uploadStatus, setUploadStatus] = useState(null);
