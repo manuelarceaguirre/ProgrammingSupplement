@@ -26,7 +26,6 @@ def upload_file():
         })
 
     except Exception as e:
-        print(f"Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/process', methods=['POST'])
@@ -47,13 +46,13 @@ def process_file():
         # Basic feature importance
         importances = []
         for col in df.columns:
-            if col != target_column:
+            if col != target_column and pd.api.types.is_numeric_dtype(df[col]):
                 try:
-                    if pd.api.types.is_numeric_dtype(df[col]):
-                        corr = df[col].corr(df[target_column])
+                    corr = abs(df[col].corr(df[target_column]))
+                    if not np.isnan(corr):
                         importances.append({
                             'feature': col,
-                            'importance': abs(float(corr * 100)) if not np.isnan(corr) else 0
+                            'importance': float(corr * 100)
                         })
                 except:
                     continue
@@ -62,10 +61,10 @@ def process_file():
         drifts = []
         mid = len(df) // 2
         for col in df.columns:
-            try:
-                if pd.api.types.is_numeric_dtype(df[col]):
-                    mean1 = df[col][:mid].mean()
-                    mean2 = df[col][mid:].mean()
+            if pd.api.types.is_numeric_dtype(df[col]):
+                try:
+                    mean1 = float(df[col][:mid].mean())
+                    mean2 = float(df[col][mid:].mean())
                     drift = abs(mean1 - mean2) / (abs(mean1) + 1e-10)
                     drifts.append({
                         'column': col,
@@ -74,8 +73,8 @@ def process_file():
                         'p_value': float(1 - drift),
                         'stattest': 'mean_diff'
                     })
-            except:
-                continue
+                except:
+                    continue
 
         return jsonify({
             'message': 'Success',
@@ -84,8 +83,7 @@ def process_file():
         })
 
     except Exception as e:
-        print(f"Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
