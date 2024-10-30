@@ -16,7 +16,7 @@ CORS(app, resources={
 
 UPLOAD_FOLDER = '/tmp'
 ALLOWED_EXTENSIONS = {'csv'}
-MAX_CONTENT_LENGTH = 15 * 1024 * 1024  # 15MB limit
+MAX_CONTENT_LENGTH = 69 * 1024 * 1024  # 15MB limit
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)

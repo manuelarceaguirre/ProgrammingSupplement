@@ -15,11 +15,11 @@ const ModelMonitoringDashboard = () => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Check file size before uploading (15MB limit)
-    if (file.size > 15 * 1024 * 1024) {
+    // Check file size before uploading (69MB limit)
+    if (file.size > 69 * 1024 * 1024) {
       setUploadStatus({
         type: 'error',
-        message: 'File size exceeds 15MB limit'
+        message: 'File size exceeds 69MB limit'
       });
       return;
     }
@@ -45,7 +45,7 @@ const ModelMonitoringDashboard = () => {
       }
 
       if (response.status === 413) {
-        throw new Error('File size too large (maximum 15MB)');
+        throw new Error('File size too large (maximum 69MB)');
       }
       
       if (!response.ok) {
@@ -108,7 +108,7 @@ const ModelMonitoringDashboard = () => {
               </Alert>
             )}
             <p className="text-sm text-gray-500">
-              Maximum file size: 15MB. Only CSV files are accepted.
+              Maximum file size: 69MB. Only CSV files are accepted.
             </p>
           </div>
         </CardContent>
