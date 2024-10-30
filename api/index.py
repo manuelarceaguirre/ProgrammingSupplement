@@ -39,69 +39,78 @@ def process_files():
         test_file = request.files['test_file']
         target_column = request.form.get('target_column')
         
-        # Read CSVs in chunks
-        chunk_size = 10000  # Adjust based on your memory constraints
-        train_df = pd.read_csv(train_file, chunksize=chunk_size)
-        test_df = pd.read_csv(test_file, chunksize=chunk_size)
-
-        # Process first chunk to validate columns and setup feature types
-        train_chunk = next(train_df)
-        test_chunk = next(test_df)
-        
-        if not all(col in test_chunk.columns for col in train_chunk.columns):
-            return jsonify({'error': 'Train and test files have different columns'}), 400
-
-        # Initialize drift monitor
+        # Process in chunks to manage memory
+        chunk_size = 5000
         monitor = MLDriftMonitor()
-
-        # Process only numeric and most important categorical columns
-        important_columns = set()
+        results = {}
+        
+        # Initialize feature types from first chunk
+        train_chunk = pd.read_csv(train_file, nrows=1)
+        feature_types = {}
+        
         for col in train_chunk.columns:
             if col == target_column:
-                important_columns.add(col)
+                feature_types[col] = 'target'
             elif pd.api.types.is_numeric_dtype(train_chunk[col]):
-                important_columns.add(col)
-            elif train_chunk[col].nunique() < 20:  # Only process categorical cols with few unique values
-                important_columns.add(col)
+                feature_types[col] = 'numerical'
+            else:
+                feature_types[col] = 'categorical'
 
-        # Process chunks
-        results = defaultdict(list)
-        for train_chunk, test_chunk in zip(train_df, test_df):
-            train_chunk = train_chunk[list(important_columns)]
-            test_chunk = test_chunk[list(important_columns)]
+        # Reset file pointers
+        train_file.seek(0)
+        test_file.seek(0)
+
+        # Process data in chunks
+        for train_chunk, test_chunk in zip(
+            pd.read_csv(train_file, chunksize=chunk_size),
+            pd.read_csv(test_file, chunksize=chunk_size)
+        ):
+            # Sample data if chunks are too large
+            if len(train_chunk) > 1000:
+                train_chunk = train_chunk.sample(n=1000)
+                test_chunk = test_chunk.sample(n=1000)
+
+            chunk_results = monitor.detect_drift(train_chunk, test_chunk, feature_types)
             
-            # Process each chunk
-            for col in important_columns:
-                if len(results[col]) >= 3:  # Limit samples per column
-                    continue
-                    
-                if pd.api.types.is_numeric_dtype(train_chunk[col]):
-                    # Sample data to reduce computation
-                    train_sample = train_chunk[col].sample(min(1000, len(train_chunk)))
-                    test_sample = test_chunk[col].sample(min(1000, len(test_chunk)))
-                    
-                    result = monitor.ks_test(train_sample.values, test_sample.values)
-                    results[col].append(result)
+            # Aggregate results
+            for feature, result in chunk_results.items():
+                if feature not in results:
+                    results[feature] = []
+                results[feature].append(result)
 
         # Average results across chunks
         final_results = []
-        for col, chunk_results in results.items():
-            if not chunk_results:
-                continue
-                
+        for feature, chunk_results in results.items():
             avg_severity = np.mean([r['severity'] for r in chunk_results])
+            avg_statistic = np.mean([r['statistic'] for r in chunk_results])
             drift_detected = any(r['drift_detected'] for r in chunk_results)
             
             final_results.append({
-                'column': col,
+                'column': feature,
                 'drift_detected': drift_detected,
                 'drift_score': float(avg_severity * 100),
                 'p_value': float(1 - avg_severity),
-                'stattest': 'numerical' if pd.api.types.is_numeric_dtype(train_chunk[col]) else 'categorical'
+                'statistic': float(avg_statistic),
+                'stattest': feature_types[feature]
             })
+
+        # Calculate feature importance for numerical columns
+        importances = []
+        for col in train_chunk.columns:
+            if col != target_column and feature_types.get(col) == 'numerical':
+                try:
+                    corr = abs(train_chunk[col].corr(train_chunk[target_column]))
+                    if not np.isnan(corr):
+                        importances.append({
+                            'feature': col,
+                            'importance': float(corr * 100)
+                        })
+                except:
+                    continue
 
         return jsonify({
             'message': 'Success',
+            'feature_importances': sorted(importances, key=lambda x: x['importance'], reverse=True),
             'drift_scores': final_results
         })
 
