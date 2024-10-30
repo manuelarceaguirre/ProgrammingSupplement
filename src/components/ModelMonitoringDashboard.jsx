@@ -18,22 +18,31 @@ const ModelMonitoringDashboard = () => {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:5000/api/upload', {
+      // Using relative path for API endpoint
+      const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
       
       const data = await response.json();
+      console.log('Response:', data); // Debug logging
       
       if (response.ok) {
         setUploadStatus({ type: 'success', message: data.message });
         setFeatureImportances(data.feature_importances);
         setDriftScores(data.drift_scores);
       } else {
-        setUploadStatus({ type: 'error', message: data.error });
+        setUploadStatus({ 
+          type: 'error', 
+          message: data.error || 'Upload failed' 
+        });
       }
     } catch (error) {
-      setUploadStatus({ type: 'error', message: 'Upload failed' });
+      console.error('Upload error:', error); // Debug logging
+      setUploadStatus({ 
+        type: 'error', 
+        message: `Upload failed: ${error.message || 'Unknown error'}`
+      });
     }
   };
 
@@ -65,7 +74,7 @@ const ModelMonitoringDashboard = () => {
               </Alert>
             )}
             <p className="text-sm text-gray-500">
-              Maximum file size: 16MB. Only CSV files are accepted.
+              Maximum file size: 15MB. Only CSV files are accepted.
             </p>
           </div>
         </CardContent>
@@ -81,7 +90,7 @@ const ModelMonitoringDashboard = () => {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={featureImportances} layout="vertical">
                 <XAxis type="number" />
-                <YAxis type="category" dataKey="feature" />
+                <YAxis type="category" dataKey="feature" width={150} />
                 <Tooltip />
                 <Bar dataKey="importance" fill="#3b82f6" />
               </BarChart>
