@@ -4,6 +4,7 @@ import os
 from werkzeug.utils import secure_filename
 import pandas as pd
 import numpy as np
+from scipy import stats
 
 app = Flask(__name__)
 CORS(app, resources={
@@ -78,24 +79,58 @@ def upload_file():
 
 def calculate_feature_importance(df, target_column=None):
     importances = []
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
     
-    # Filter out the target column from numeric_cols if it exists
+    # Get numeric and categorical columns
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    categorical_cols = df.select_dtypes(include=['object']).columns
+    
+    # Remove target column from feature lists
     if target_column:
         numeric_cols = [col for col in numeric_cols if col != target_column]
+        categorical_cols = [col for col in categorical_cols if col != target_column]
     
     for column in numeric_cols:
         if target_column and target_column in df.columns:
-            # Calculate correlation-based importance with target
-            correlation = abs(df[column].corr(df[target_column]))
-            importance = correlation * 100
+            if df[target_column].dtype in [np.number]:
+                # For numeric target, use correlation
+                correlation = abs(df[column].corr(df[target_column]))
+                importance = correlation * 100
+            else:
+                # For categorical target, use ANOVA F-value
+                groups = [group[column].values for name, group in df.groupby(target_column)]
+                f_stat, _ = stats.f_oneway(*groups)
+                importance = min(f_stat * 10, 100) if not np.isnan(f_stat) else 0
         else:
-            # If no target, use variance as importance
-            importance = (df[column].std() / df[column].mean() * 100) if df[column].mean() != 0 else 0
+            # If no target, use coefficient of variation
+            mean = df[column].mean()
+            importance = (df[column].std() / mean * 100) if mean != 0 else 0
             
         importances.append({
             "feature": str(column),
             "importance": float(min(max(importance, 0), 100))
+        })
+    
+    for column in categorical_cols:
+        if target_column and target_column in df.columns:
+            if df[target_column].dtype in [np.number]:
+                # For numeric target, use ANOVA
+                groups = [group[target_column].values for name, group in df.groupby(column)]
+                f_stat, _ = stats.f_oneway(*groups)
+                importance = min(f_stat * 10, 100) if not np.isnan(f_stat) else 0
+            else:
+                # For categorical target, use Chi-square
+                contingency = pd.crosstab(df[column], df[target_column])
+                chi2, _, _ = stats.chi2_contingency(contingency)
+                importance = min(chi2 * 10, 100)
+        else:
+            # If no target, use entropy
+            value_counts = df[column].value_counts(normalize=True)
+            entropy = stats.entropy(value_counts)
+            importance = min(entropy * 50, 100)
+            
+        importances.append({
+            "feature": str(column),
+            "importance": float(importance)
         })
     
     # Sort by importance and get top 5
@@ -104,38 +139,44 @@ def calculate_feature_importance(df, target_column=None):
 def calculate_drift(df):
     drift_scores = []
     numeric_cols = df.select_dtypes(include=[np.number]).columns
+    categorical_cols = df.select_dtypes(include=['object']).columns
     
     # Split data into two parts
-    mid_point = len(df) // 2
+    midpoint = len(df) // 2
+    
     for column in numeric_cols:
-        part1 = df[column][:mid_point]
-        part2 = df[column][mid_point:]
+        # For numeric columns, use Kolmogorov-Smirnov test
+        part1 = df[column].iloc[:midpoint]
+        part2 = df[column].iloc[midpoint:]
         
-        # Calculate basic statistics
-        mean_diff = abs(part1.mean() - part2.mean())
-        std_diff = abs(part1.std() - part2.std())
-        
-        # Normalize the differences
-        mean_norm = mean_diff / part1.mean() if part1.mean() != 0 else mean_diff
-        std_norm = std_diff / part1.std() if part1.std() != 0 else std_diff
-        
-        # Calculate drift score (0 to 1)
-        drift_score = float((mean_norm + std_norm) / 2)
-        
-        # Calculate p-value using simple distribution comparison
-        total_diff = abs(part1.mean() - part2.mean()) / (part1.std() + 1e-10)
-        p_value = float(1 / (1 + np.exp(total_diff)))  # Convert to probability-like score
+        statistic, p_value = stats.ks_2samp(part1, part2)
         
         drift_scores.append({
             "column": str(column),
-            "drift_detected": bool(drift_score > 0.1),  # Convert numpy.bool_ to Python bool
-            "p_value": p_value,
-            "stattest": "mean_std_comparison",
-            "drift_score": drift_score
+            "drift_detected": p_value < 0.05,
+            "p_value": float(p_value),
+            "drift_score": float(statistic),
+            "stattest": "Kolmogorov-Smirnov"
         })
     
-    # Sort by drift score and return top 3
-    return sorted(drift_scores, key=lambda x: x['drift_score'], reverse=True)[:3]
+    for column in categorical_cols:
+        # For categorical columns, use Chi-square test
+        contingency = pd.crosstab(
+            df.index >= midpoint,  # True for second half
+            df[column]
+        )
+        
+        chi2, p_value, _, _ = stats.chi2_contingency(contingency)
+        
+        drift_scores.append({
+            "column": str(column),
+            "drift_detected": p_value < 0.05,
+            "p_value": float(p_value),
+            "drift_score": float(chi2),
+            "stattest": "Chi-square"
+        })
+    
+    return drift_scores
 
 @app.route('/api/health', methods=['GET'])
 def health():
