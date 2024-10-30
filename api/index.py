@@ -44,49 +44,43 @@ def process_file():
         # Read CSV file
         df = pd.read_csv(file)
         
-        # Calculate feature importance using correlations
-        feature_importances = []
+        # Basic feature importance
+        importances = []
         for col in df.columns:
-            if col != target_column and pd.api.types.is_numeric_dtype(df[col]):
+            if col != target_column:
                 try:
-                    corr = abs(df[col].corr(df[target_column]))
-                    feature_importances.append({
-                        'feature': col,
-                        'importance': float(corr * 100)
-                    })
+                    if pd.api.types.is_numeric_dtype(df[col]):
+                        corr = df[col].corr(df[target_column])
+                        importances.append({
+                            'feature': col,
+                            'importance': abs(float(corr * 100)) if not np.isnan(corr) else 0
+                        })
                 except:
                     continue
         
-        # Sort and get top 5
-        feature_importances = sorted(
-            feature_importances, 
-            key=lambda x: x['importance'], 
-            reverse=True
-        )[:5]
-        
-        # Calculate simple drift scores
-        drift_scores = []
-        midpoint = len(df) // 2
+        # Basic drift detection
+        drifts = []
+        mid = len(df) // 2
         for col in df.columns:
-            if pd.api.types.is_numeric_dtype(df[col]):
-                try:
-                    part1 = df[col][:midpoint].mean()
-                    part2 = df[col][midpoint:].mean()
-                    drift = abs(part1 - part2) / max(abs(part1), 1)
-                    drift_scores.append({
+            try:
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    mean1 = df[col][:mid].mean()
+                    mean2 = df[col][mid:].mean()
+                    drift = abs(mean1 - mean2) / (abs(mean1) + 1e-10)
+                    drifts.append({
                         'column': col,
                         'drift_detected': drift > 0.1,
-                        'p_value': float(1 - drift),
                         'drift_score': float(drift * 100),
+                        'p_value': float(1 - drift),
                         'stattest': 'mean_diff'
                     })
-                except:
-                    continue
+            except:
+                continue
 
         return jsonify({
             'message': 'Success',
-            'feature_importances': feature_importances,
-            'drift_scores': drift_scores
+            'feature_importances': sorted(importances, key=lambda x: x['importance'], reverse=True)[:5],
+            'drift_scores': drifts
         })
 
     except Exception as e:

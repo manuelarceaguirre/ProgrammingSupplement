@@ -12,7 +12,7 @@
         "src": "api/index.py",
         "use": "@vercel/python",
         "config": {
-          "runtime": "python3.9",
+          "runtime": "python3.8",
           "maxDuration": 10
         }
       }
@@ -20,8 +20,7 @@
     "routes": [
       {
         "src": "/api/(.*)",
-        "dest": "api/index.py",
-        "methods": ["GET", "POST", "OPTIONS"]
+        "dest": "api/index.py"
       },
       {
         "handle": "filesystem"
