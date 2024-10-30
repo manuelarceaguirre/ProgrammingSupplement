@@ -27,6 +27,21 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def convert_to_native_types(obj):
+    if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+        np.int16, np.int32, np.int64, np.uint8,
+        np.uint16, np.uint32, np.uint64)):
+        return int(obj)
+    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, (np.bool_)):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_to_native_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_native_types(item) for item in obj]
+    return obj
+
 def calculate_feature_importance(df):
     importances = []
     numeric_cols = df.select_dtypes(include=[np.number]).columns
@@ -47,7 +62,7 @@ def calculate_feature_importance(df):
             importance = (df[column].std() / df[column].mean() * 100) if df[column].mean() != 0 else 0
             
         importances.append({
-            "feature": column,
+            "feature": str(column),
             "importance": float(min(max(importance, 0), 100))  # Ensure between 0-100
         })
     
@@ -73,18 +88,18 @@ def calculate_drift(df):
         std_norm = std_diff / part1.std() if part1.std() != 0 else std_diff
         
         # Calculate drift score (0 to 1)
-        drift_score = (mean_norm + std_norm) / 2
+        drift_score = float((mean_norm + std_norm) / 2)
         
         # Calculate p-value using simple distribution comparison
         total_diff = abs(part1.mean() - part2.mean()) / (part1.std() + 1e-10)
-        p_value = 1 / (1 + np.exp(total_diff))  # Convert to probability-like score
+        p_value = float(1 / (1 + np.exp(total_diff)))  # Convert to probability-like score
         
         drift_scores.append({
-            "column": column,
-            "drift_detected": drift_score > 0.1,  # Threshold for drift detection
-            "p_value": float(p_value),
+            "column": str(column),
+            "drift_detected": bool(drift_score > 0.1),  # Convert numpy.bool_ to Python bool
+            "p_value": p_value,
             "stattest": "mean_std_comparison",
-            "drift_score": float(drift_score)
+            "drift_score": drift_score
         })
     
     # Sort by drift score and return top 3
@@ -121,6 +136,10 @@ def upload_file():
             feature_importances = calculate_feature_importance(df)
             drift_scores = calculate_drift(df)
             
+            # Convert numpy types to native Python types
+            feature_importances = convert_to_native_types(feature_importances)
+            drift_scores = convert_to_native_types(drift_scores)
+            
             os.remove(filepath)  # Clean up
             
             return jsonify({
@@ -140,19 +159,6 @@ def upload_file():
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({"status": "healthy"}), 200, {'Content-Type': 'application/json'}
-
-# Error handlers
-@app.errorhandler(413)
-def request_entity_too_large(error):
-    return jsonify({'error': 'File too large (max 15MB)'}), 413, {'Content-Type': 'application/json'}
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'error': 'Internal server error'}), 500, {'Content-Type': 'application/json'}
-
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Not found'}), 404, {'Content-Type': 'application/json'}
 
 if __name__ == '__main__':
     app.run(debug=True)
