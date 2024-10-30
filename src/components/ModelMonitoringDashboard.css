@@ -107,3 +107,22 @@
     color: var(--text-secondary);
     margin: 5px 0;
   }
+  
+  .apexcharts-canvas {
+    margin: 0 auto;
+  }
+  
+  .card .apexcharts-canvas {
+    background: var(--bg-secondary) !important;
+  }
+  
+  .apexcharts-tooltip {
+    background: var(--bg-primary) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+  }
+  
+  .apexcharts-tooltip-title {
+    background: var(--bg-secondary) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+  }

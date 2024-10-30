@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ReactApexChart from 'react-apexcharts';
 import './ModelMonitoringDashboard.css';
 
 function ModelMonitoringDashboard() {
@@ -87,6 +88,101 @@ function ModelMonitoringDashboard() {
     }
   };
 
+  const getFeatureImportanceChart = () => {
+    if (!results?.feature_importances) return null;
+
+    const chartData = {
+      options: {
+        chart: {
+          type: 'bar',
+          background: 'var(--bg-secondary)',
+          foreColor: 'var(--text-primary)',
+        },
+        theme: {
+          mode: 'dark'
+        },
+        xaxis: {
+          categories: results.feature_importances.map(item => item.feature),
+        },
+        yaxis: {
+          title: {
+            text: 'Importance (%)'
+          }
+        },
+        plotOptions: {
+          bar: {
+            horizontal: true
+          }
+        },
+        colors: ['#646cff']
+      },
+      series: [{
+        name: 'Feature Importance',
+        data: results.feature_importances.map(item => item.importance)
+      }]
+    };
+
+    return (
+      <ReactApexChart
+        options={chartData.options}
+        series={chartData.series}
+        type="bar"
+        height={350}
+      />
+    );
+  };
+
+  const getDriftChart = () => {
+    if (!results?.drift_scores) return null;
+
+    const chartData = {
+      options: {
+        chart: {
+          type: 'bar',
+          background: 'var(--bg-secondary)',
+          foreColor: 'var(--text-primary)',
+        },
+        theme: {
+          mode: 'dark'
+        },
+        xaxis: {
+          categories: results.drift_scores.map(item => item.column),
+        },
+        yaxis: {
+          title: {
+            text: 'Drift Score (%)'
+          }
+        },
+        plotOptions: {
+          bar: {
+            columnWidth: '50%',
+            colors: {
+              ranges: [{
+                from: 30,
+                to: 100,
+                color: '#ff4d4d'
+              }]
+            }
+          }
+        },
+        colors: ['#4caf50']
+      },
+      series: [{
+        name: 'Drift Score',
+        data: results.drift_scores.map(item => item.drift_score)
+      }]
+    };
+
+    return (
+      <ReactApexChart
+        options={chartData.options}
+        series={chartData.series}
+        type="bar"
+        height={350}
+      />
+    );
+  };
+
   return (
     <div className="dashboard-container">
       <div className="card">
@@ -149,6 +245,7 @@ function ModelMonitoringDashboard() {
         <div className="results-section">
           <div className="card">
             <h2>Feature Importance</h2>
+            {getFeatureImportanceChart()}
             <table className="table">
               <thead>
                 <tr>
@@ -169,6 +266,7 @@ function ModelMonitoringDashboard() {
 
           <div className="card">
             <h2>Data Drift Analysis</h2>
+            {getDriftChart()}
             <table className="table">
               <thead>
                 <tr>
