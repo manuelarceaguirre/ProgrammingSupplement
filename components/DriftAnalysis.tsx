@@ -31,31 +31,31 @@ export default function DriftAnalysis({
             <tr>
               <th className="px-4 py-2">Column</th>
               <th className="px-4 py-2">Drift Score</th>
-              <th className="px-4 py-2">Test Type & Result</th>
+              <th className="px-4 py-2">Test Type</th>
               <th className="px-4 py-2">Status</th>
             </tr>
           </thead>
           <tbody>
             {driftScores.map((score, index) => (
-              <tr key={index} style={{ color: score.color }}>
+              <tr key={index}>
                 <td className="px-4 py-2">{score.column}</td>
-                <td className="px-4 py-2">{score.drift_score.toFixed(2)}%</td>
+                <td className="px-4 py-2" style={{ color: score.color }}>
+                  {score.drift_score.toFixed(2)}%
+                </td>
                 <td className="px-4 py-2">
                   {score.test_type}
-                  <Tooltip title={testDescriptions[score.test_type]}>
-                    <InfoIcon fontSize="small" className="ml-2 cursor-pointer" />
-                  </Tooltip>
-                  <div className="text-sm">
+                  <br />
+                  <span className="text-sm">
                     Statistic: {score.statistic.toFixed(4)}
                     <br />
                     p-value: {score.p_value.toFixed(4)}
-                  </div>
+                  </span>
                 </td>
-                <td className="px-4 py-2">
+                <td className="px-4 py-2" style={{ color: score.color }}>
                   {score.drift_detected ? 'Drift Detected' : 'No Drift'}
                   {score.drift_detected && (
                     <div className="text-sm">
-                      (Exceeds threshold of {score.threshold}%)
+                      (Threshold: {score.threshold}%)
                     </div>
                   )}
                 </td>
