@@ -186,17 +186,16 @@ function ModelMonitoringDashboard() {
         plotOptions: {
           bar: {
             columnWidth: '50%',
+            distributed: true, // Enable individual column colors
           }
         },
-        colors: ['#4caf50']  // Default color (green)
+        colors: results.drift_scores.map(item => 
+          item.drift_detected ? '#ff4d4d' : '#4caf50'  // Red if drift detected, green if not
+        )
       },
       series: [{
         name: 'Drift Score',
-        data: results.drift_scores.map(item => ({
-          x: item.column,
-          y: item.drift_score,
-          color: item.drift_detected ? '#ff4d4d' : '#4caf50'  // Red if drift detected, green if not
-        }))
+        data: results.drift_scores.map(item => item.drift_score)
       }]
     };
 
