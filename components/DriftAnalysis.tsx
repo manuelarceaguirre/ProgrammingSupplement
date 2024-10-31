@@ -26,38 +26,32 @@ export default function DriftAnalysis({
   return (
     <div className="mt-4">
       <div className="overflow-x-auto">
-        <table className="min-w-full">
+        <table className="min-w-full text-gray-300">
           <thead>
             <tr>
               <th className="px-4 py-2">Column</th>
               <th className="px-4 py-2">Drift Score</th>
-              <th className="px-4 py-2">Test Type</th>
+              <th className="px-4 py-2">Test Details</th>
               <th className="px-4 py-2">Status</th>
             </tr>
           </thead>
           <tbody>
             {driftScores.map((score, index) => (
-              <tr key={index}>
+              <tr key={index} className="border-t border-gray-700">
                 <td className="px-4 py-2">{score.column}</td>
                 <td className="px-4 py-2" style={{ color: score.color }}>
                   {score.drift_score.toFixed(2)}%
                 </td>
                 <td className="px-4 py-2">
                   {score.test_type}
-                  <br />
-                  <span className="text-sm">
-                    Statistic: {score.statistic.toFixed(4)}
+                  <div className="text-sm text-gray-400">
+                    Test Statistic: {score.statistic.toFixed(4)}
                     <br />
                     p-value: {score.p_value.toFixed(4)}
-                  </span>
+                  </div>
                 </td>
                 <td className="px-4 py-2" style={{ color: score.color }}>
                   {score.drift_detected ? 'Drift Detected' : 'No Drift'}
-                  {score.drift_detected && (
-                    <div className="text-sm">
-                      (Threshold: {score.threshold}%)
-                    </div>
-                  )}
                 </td>
               </tr>
             ))}
@@ -65,7 +59,7 @@ export default function DriftAnalysis({
         </table>
       </div>
 
-      <div className="mt-8">
+      <div className="mt-8 text-gray-300">
         <h3 className="text-lg font-bold mb-2">Test Descriptions:</h3>
         {Object.entries(testDescriptions).map(([test, description]) => (
           <div key={test} className="mb-2">
