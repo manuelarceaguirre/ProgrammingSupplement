@@ -14,10 +14,12 @@ setTestDescriptions(data.test_descriptions);
 return (
   <div>
     {/* ... other components ... */}
-    <DriftAnalysis 
-      driftScores={driftScores} 
-      testDescriptions={testDescriptions} 
-    />
+    {driftResults && (
+      <DriftAnalysis 
+        driftScores={driftResults.drift_scores} 
+        testDescriptions={driftResults.test_descriptions}
+      />
+    )}
     {/* ... other components ... */}
   </div>
 ); 

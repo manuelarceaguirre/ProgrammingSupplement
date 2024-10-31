@@ -9,6 +9,7 @@ interface DriftScore {
   color: string;
   test_type: string;
   threshold: number;
+  statistic: number;
 }
 
 interface TestDescriptions {
@@ -24,31 +25,46 @@ export default function DriftAnalysis({
 }) {
   return (
     <div className="mt-4">
-      <h2 className="text-xl font-bold mb-4">Drift Analysis Results</h2>
-      
-      {/* Drift Scores */}
-      {driftScores.map((score, index) => (
-        <div key={index} style={{ color: score.color }} className="mb-4 p-4 border rounded">
-          <strong>{score.column}</strong>
-          <div>
-            Test Type: {score.test_type}
-            <Tooltip title={testDescriptions[score.test_type]}>
-              <InfoIcon fontSize="small" className="ml-2 cursor-pointer" />
-            </Tooltip>
-          </div>
-          <div>
-            Drift Score: {score.drift_score.toFixed(2)}%
-            {score.drift_detected && (
-              <span style={{ color: 'red' }}>
-                {' '}(Exceeds threshold of {(score.threshold * 100).toFixed(2)}%)
-              </span>
-            )}
-          </div>
-          <div>P-value: {score.p_value.toFixed(4)}</div>
-        </div>
-      ))}
+      <div className="overflow-x-auto">
+        <table className="min-w-full">
+          <thead>
+            <tr>
+              <th className="px-4 py-2">Column</th>
+              <th className="px-4 py-2">Drift Score</th>
+              <th className="px-4 py-2">Test Type & Result</th>
+              <th className="px-4 py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {driftScores.map((score, index) => (
+              <tr key={index} style={{ color: score.color }}>
+                <td className="px-4 py-2">{score.column}</td>
+                <td className="px-4 py-2">{score.drift_score.toFixed(2)}%</td>
+                <td className="px-4 py-2">
+                  {score.test_type}
+                  <Tooltip title={testDescriptions[score.test_type]}>
+                    <InfoIcon fontSize="small" className="ml-2 cursor-pointer" />
+                  </Tooltip>
+                  <div className="text-sm">
+                    Statistic: {score.statistic.toFixed(4)}
+                    <br />
+                    p-value: {score.p_value.toFixed(4)}
+                  </div>
+                </td>
+                <td className="px-4 py-2">
+                  {score.drift_detected ? 'Drift Detected' : 'No Drift'}
+                  {score.drift_detected && (
+                    <div className="text-sm">
+                      (Exceeds threshold of {score.threshold}%)
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      {/* Test Descriptions */}
       <div className="mt-8">
         <h3 className="text-lg font-bold mb-2">Test Descriptions:</h3>
         {Object.entries(testDescriptions).map(([test, description]) => (
