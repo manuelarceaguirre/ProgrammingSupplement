@@ -84,12 +84,19 @@ def process_files():
         # Average results across chunks
         final_results = []
         for feature, chunk_results in results.items():
-            if not chunk_results:  # Skip if no results for this feature
+            if not chunk_results:
                 continue
                 
             avg_severity = np.mean([r['severity'] for r in chunk_results])
             avg_statistic = np.mean([r['statistic'] for r in chunk_results])
             drift_detected = any(r['drift_detected'] for r in chunk_results)
+            
+            # Get the test type based on feature type
+            test_type = {
+                'numerical': 'Kolmogorov-Smirnov Test',
+                'categorical': 'Cramér\'s V Test',
+                'target': 'Population Stability Index'
+            }.get(feature_types[feature], 'Unknown Test')
             
             final_results.append({
                 'column': feature,
@@ -97,34 +104,39 @@ def process_files():
                 'drift_score': float(avg_severity * 100),
                 'p_value': float(1 - avg_severity),
                 'statistic': float(avg_statistic),
-                'stattest': feature_types[feature]
+                'stattest': feature_types[feature],
+                'test_type': test_type,
+                'color': 'red' if drift_detected else 'black',
+                'threshold': {
+                    'numerical': 0.05,  # KS test threshold
+                    'categorical': 0.15,  # Cramer's V threshold
+                    'target': 0.2,  # PSI threshold
+                }.get(feature_types[feature], 0.05)
             })
 
-        # Calculate feature importance for numerical columns
-        importances = []
-        for col in train_chunk.columns:
-            if col != target_column and feature_types.get(col) == 'numerical':
-                try:
-                    corr = abs(train_chunk[col].corr(train_chunk[target_column]))
-                    if not np.isnan(corr):
-                        importances.append({
-                            'feature': col,
-                            'importance': float(corr * 100)
-                        })
-                except:
-                    continue
+        # Sort results by drift score (highest first)
+        final_results.sort(key=lambda x: x['drift_score'], reverse=True)
 
         return jsonify({
             'message': 'Success',
             'feature_importances': sorted(importances, key=lambda x: x['importance'], reverse=True),
-            'drift_scores': final_results
+            'drift_scores': final_results,
+            'test_descriptions': {
+                'Kolmogorov-Smirnov Test': 'Measures the maximum distance between two cumulative distribution functions. Used for numerical features.',
+                'Cramér\'s V Test': 'Measures the strength of association between categorical variables. Based on chi-square statistic.',
+                'Population Stability Index': 'Measures how much a distribution has shifted between two samples. Used for target variables.'
+            },
+            'threshold_descriptions': {
+                'numerical': 'KS test threshold: 0.05 (95% confidence)',
+                'categorical': 'Cramér\'s V threshold: 0.15 (moderate association)',
+                'target': 'PSI threshold: 0.2 (significant shift)'
+            }
         })
 
     except Exception as e:
-        print(f"Error in process_files: {str(e)}")  # Debug log
-        print(f"Error type: {type(e)}")  # Debug log
+        print(f"Error in process_files: {str(e)}")
         import traceback
-        print(f"Traceback: {traceback.format_exc()}")  # Full error traceback
+        print(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 # Error handler for 500 errors
