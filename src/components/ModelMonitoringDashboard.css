@@ -163,3 +163,28 @@
         color: #fff;
     }
   }
+  
+  .test-details {
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+  
+  .test-descriptions {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+  }
+  
+  .test-description {
+    margin-bottom: 10px;
+  }
+  
+  /* Dark theme variables */
+  :root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #242424;
+    --text-primary: rgba(255, 255, 255, 0.87);
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --border-color: rgba(255, 255, 255, 0.1);
+  }

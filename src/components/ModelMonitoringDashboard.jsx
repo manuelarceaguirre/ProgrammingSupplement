@@ -186,20 +186,17 @@ function ModelMonitoringDashboard() {
         plotOptions: {
           bar: {
             columnWidth: '50%',
-            colors: {
-              ranges: [{
-                from: 30,
-                to: 100,
-                color: '#ff4d4d'
-              }]
-            }
           }
         },
-        colors: ['#4caf50']
+        colors: ['#4caf50']  // Default color (green)
       },
       series: [{
         name: 'Drift Score',
-        data: results.drift_scores.map(item => item.drift_score)
+        data: results.drift_scores.map(item => ({
+          x: item.column,
+          y: item.drift_score,
+          color: item.drift_detected ? '#ff4d4d' : '#4caf50'  // Red if drift detected, green if not
+        }))
       }]
     };
 
@@ -300,6 +297,7 @@ function ModelMonitoringDashboard() {
                 <tr>
                   <th>Column</th>
                   <th>Drift Score</th>
+                  <th>Test Details</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -308,6 +306,14 @@ function ModelMonitoringDashboard() {
                   <tr key={index}>
                     <td>{item.column}</td>
                     <td>{item.drift_score.toFixed(2)}%</td>
+                    <td>
+                      {item.test_type}
+                      <div className="test-details">
+                        <small>Test Statistic: {item.statistic.toFixed(4)}</small>
+                        <br />
+                        <small>p-value: {item.p_value.toFixed(4)}</small>
+                      </div>
+                    </td>
                     <td className={item.drift_detected ? 'drift-alert' : 'drift-ok'}>
                       {item.drift_detected ? 'Drift Detected' : 'No Drift'}
                     </td>
@@ -315,6 +321,17 @@ function ModelMonitoringDashboard() {
                 ))}
               </tbody>
             </table>
+
+            {results.test_descriptions && (
+              <div className="test-descriptions">
+                <h3>Test Descriptions</h3>
+                {Object.entries(results.test_descriptions).map(([test, description]) => (
+                  <div key={test} className="test-description">
+                    <strong>{test}:</strong> {description}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
