@@ -44,6 +44,7 @@ def process_files():
         chunk_size = 5000
         monitor = MLDriftMonitor()
         results = {}
+        importances = []  # Initialize importances list
         
         # Initialize feature types from first chunk
         train_chunk = pd.read_csv(train_file, nrows=1)
@@ -61,12 +62,31 @@ def process_files():
         train_file.seek(0)
         test_file.seek(0)
 
+        # Read first chunk for feature importance calculation
+        first_train_chunk = pd.read_csv(train_file, nrows=chunk_size)
+        
+        # Calculate feature importance for numerical columns
+        for col in first_train_chunk.columns:
+            if col != target_column and feature_types.get(col) == 'numerical':
+                try:
+                    corr = abs(first_train_chunk[col].corr(first_train_chunk[target_column]))
+                    if not np.isnan(corr):
+                        importances.append({
+                            'feature': col,
+                            'importance': float(corr * 100)
+                        })
+                except:
+                    continue
+
+        # Reset file pointer again
+        train_file.seek(0)
+
         # Process data in chunks
         for train_chunk, test_chunk in zip(
             pd.read_csv(train_file, chunksize=chunk_size),
             pd.read_csv(test_file, chunksize=chunk_size)
         ):
-            # Sample data if chunks are too large, but don't sample more than available
+            # Sample data if chunks are too large
             sample_size = min(1000, len(train_chunk), len(test_chunk))
             if sample_size < len(train_chunk):
                 train_chunk = train_chunk.sample(n=sample_size, random_state=42)
@@ -114,7 +134,7 @@ def process_files():
                 }.get(feature_types[feature], 0.05)
             })
 
-        # Sort results by drift score (highest first)
+        # Sort results by drift score
         final_results.sort(key=lambda x: x['drift_score'], reverse=True)
 
         return jsonify({
