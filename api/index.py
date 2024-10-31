@@ -126,12 +126,12 @@ def process_files():
                 'statistic': float(avg_statistic),
                 'stattest': feature_types[feature],
                 'test_type': test_type,
-                'color': 'red' if drift_detected else 'black',
+                'color': 'red' if drift_detected else 'green',
                 'threshold': {
-                    'numerical': 0.05,  # KS test threshold
-                    'categorical': 0.15,  # Cramer's V threshold
-                    'target': 0.2,  # PSI threshold
-                }.get(feature_types[feature], 0.05)
+                    'numerical': 0.60,  # 60% threshold
+                    'categorical': 0.70,  # 70% threshold
+                    'target': 0.80,  # 80% threshold
+                }.get(feature_types[feature], 0.60)
             })
 
         # Sort results by drift score
@@ -147,9 +147,9 @@ def process_files():
                 'Population Stability Index': 'Measures how much a distribution has shifted between two samples. Used for target variables.'
             },
             'threshold_descriptions': {
-                'numerical': 'KS test threshold: 0.05 (95% confidence)',
-                'categorical': 'Cramér\'s V threshold: 0.15 (moderate association)',
-                'target': 'PSI threshold: 0.2 (significant shift)'
+                'numerical': 'Drift threshold: 60% (significant change)',
+                'categorical': 'Drift threshold: 70% (significant change)',
+                'target': 'Drift threshold: 80% (significant change)'
             }
         })
 
