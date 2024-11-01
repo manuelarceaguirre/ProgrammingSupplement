@@ -1,71 +1,53 @@
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-import pandas as pd
-import numpy as np
-from collections import defaultdict
-from .drift_monitor import MLDriftMonitor
+from flask import Flask,jsonify,request;from flask_cors import CORS;import pandas as pd;import numpy as np
+from collections import defaultdict;from .drift_monitor import MLDriftMonitor
+#I was limited by Vercel's free version so I included few libraries
 
 app = Flask(__name__)
-CORS(app)
-
+CORS(app)#We create the Flask app and allow CORS requests for front and api communication
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
-
         file = request.files['file']
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
-
-        # Read CSV file
+#We create the enpoint and check if the file was uploaded and valid
         df = pd.read_csv(file)
-        
-        # Return columns list
+#Read CSV file        
         return jsonify({
             'columns': df.columns.tolist(),
             'message': 'File uploaded successfully'
         })
-
+#Gets the columns and delivers a succesful message
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/process', methods=['POST'])
+        return jsonify({'error': str(e)}), 500 #returns exceptions that occur in the upload
+@app.route('/api/process', methods=['POST']) #sets endpoint to process both train and test files
 def process_files():
     try:
         if 'train_file' not in request.files or 'test_file' not in request.files:
             return jsonify({'error': 'Both train and test files are required'}), 400
-
         train_file = request.files['train_file']
         test_file = request.files['test_file']
-        target_column = request.form.get('target_column')
-        
-        # Process in chunks to manage memory
+        target_column = request.form.get('target_column')#defines test, train and the target column
         chunk_size = 5000
         monitor = MLDriftMonitor()
         results = {}
-        importances = []  # Initialize importances list
-        
-        # Initialize feature types from first chunk
-        train_chunk = pd.read_csv(train_file, nrows=1)
+        importances = []
+#I had to process in chunks to manage memory, creates a monitor object, dict for results and the list for ft importance
+        train_chunk = pd.read_csv(train_file, nrows=1)#Reads the first row
         feature_types = {}
-        
-        for col in train_chunk.columns:
+        for col in train_chunk.columns:#Iterates on columns to determine if they are target, numerical, or categorical
             if col == target_column:
                 feature_types[col] = 'target'
             elif pd.api.types.is_numeric_dtype(train_chunk[col]):
                 feature_types[col] = 'numerical'
             else:
                 feature_types[col] = 'categorical'
-
-        # Reset file pointers
         train_file.seek(0)
         test_file.seek(0)
-
-        # Read first chunk for feature importance calculation
-        first_train_chunk = pd.read_csv(train_file, nrows=chunk_size)
-        
-        # Calculate feature importance for numerical columns
+#It resets file pointers to start over the reading
+        first_train_chunk = pd.read_csv(train_file, nrows=chunk_size) #Reads the first chunk for ft importance
         for col in first_train_chunk.columns:
             if col != target_column and feature_types.get(col) == 'numerical':
                 try:
@@ -74,50 +56,39 @@ def process_files():
                         importances.append({
                             'feature': col,
                             'importance': float(corr * 100)
-                        })
+                        }) #Calculates ft importance by doing absolute correlation to numerical
                 except:
                     continue
-
-        # Reset file pointer again
-        train_file.seek(0)
-
-        # Process data in chunks
+        train_file.seek(0) #We reset again
         for train_chunk, test_chunk in zip(
             pd.read_csv(train_file, chunksize=chunk_size),
             pd.read_csv(test_file, chunksize=chunk_size)
         ):
-            # Sample data if chunks are too large
             sample_size = min(1000, len(train_chunk), len(test_chunk))
             if sample_size < len(train_chunk):
                 train_chunk = train_chunk.sample(n=sample_size, random_state=42)
             if sample_size < len(test_chunk):
                 test_chunk = test_chunk.sample(n=sample_size, random_state=42)
-
             chunk_results = monitor.detect_drift(train_chunk, test_chunk, feature_types)
-            
-            # Aggregate results
+#It samples data and uses detect_drift
             for feature, result in chunk_results.items():
                 if feature not in results:
                     results[feature] = []
                 results[feature].append(result)
-
-        # Average results across chunks
+#Aggregates by each column
         final_results = []
         for feature, chunk_results in results.items():
             if not chunk_results:
                 continue
-                
             avg_severity = np.mean([r['severity'] for r in chunk_results])
             avg_statistic = np.mean([r['statistic'] for r in chunk_results])
             drift_detected = any(r['drift_detected'] for r in chunk_results)
-            
-            # Get the test type based on feature type
+#It calculates average severity, average statistic, and checks if drift was detected
             test_type = {
                 'numerical': 'Kolmogorov-Smirnov Test',
                 'categorical': 'Cramér\'s V Test',
                 'target': 'Population Stability Index'
-            }.get(feature_types[feature], 'Unknown Test')
-            
+            }.get(feature_types[feature], 'Unknown Test') #Decide which test is best
             final_results.append({
                 'column': feature,
                 'drift_detected': drift_detected,
@@ -133,10 +104,8 @@ def process_files():
                     'target': 0.80,  # 80% threshold
                 }.get(feature_types[feature], 0.60)
             })
-
-        # Sort results by drift score
+#It appends all results with drift score, p value and threshold
         final_results.sort(key=lambda x: x['drift_score'], reverse=True)
-
         return jsonify({
             'message': 'Success',
             'feature_importances': sorted(importances, key=lambda x: x['importance'], reverse=True),
@@ -152,20 +121,17 @@ def process_files():
                 'target': 'Drift threshold: 80% (significant change)'
             }
         })
-
+#Sorts all the results by drift score, feature importance and the test descriptions
     except Exception as e:
         print(f"Error in process_files: {str(e)}")
         import traceback
         print(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
-
-# Error handler for 500 errors
 @app.errorhandler(500)
 def handle_500_error(e):
     return jsonify({
         'error': 'Internal server error',
         'message': str(e)
-    }), 500
-
+    }), 500 #This part handles just the 500 error 
 if __name__ == '__main__':
-    app.run()
+    app.run()#Starts the app
