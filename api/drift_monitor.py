@@ -1,11 +1,19 @@
 import numpy as np
 import pandas as pd
 from typing import Dict, Union
+from datetime import datetime
 
 class MLDriftMonitor:
     """
     ML Drift Monitor implementing 3 essential tests without scipy dependency
     """
+    
+    def __init__(self):
+        # Add history tracking
+        self.drift_history = {
+            'timestamps': [],
+            'metrics': {}
+        }
     
     def ks_test(self, reference: np.ndarray, current: np.ndarray, 
                 threshold: float = 0.05) -> Dict[str, Union[bool, float]]:
@@ -129,10 +137,12 @@ class MLDriftMonitor:
     def detect_drift(self, reference_data: pd.DataFrame, current_data: pd.DataFrame, 
                     feature_types: Dict[str, str]) -> Dict[str, dict]:
         """
-        Detect drift across all features using appropriate tests.
+        Detect drift across all features and store historical results.
         """
         results = {}
+        timestamp = datetime.now().isoformat()
         
+        # Calculate drift for each feature
         for feature, feat_type in feature_types.items():
             if feature not in reference_data.columns or feature not in current_data.columns:
                 continue
@@ -147,4 +157,55 @@ class MLDriftMonitor:
             elif feat_type == 'target':
                 results[feature] = self.psi_test(ref_values, curr_values)
         
+        # Store historical results
+        self.drift_history['timestamps'].append(timestamp)
+        for feature, result in results.items():
+            if feature not in self.drift_history['metrics']:
+                self.drift_history['metrics'][feature] = []
+            self.drift_history['metrics'][feature].append({
+                'timestamp': timestamp,
+                'severity': result['severity'],
+                'drift_detected': result['drift_detected']
+            })
+            
         return results
+
+    def get_drift_history(self, feature: str = None, 
+                         start_time: str = None, 
+                         end_time: str = None) -> Dict:
+        """
+        Get historical drift data for UI visualization.
+        """
+        if not self.drift_history['timestamps']:
+            return []
+
+        # Filter by time range if specified
+        start = datetime.fromisoformat(start_time) if start_time else None
+        end = datetime.fromisoformat(end_time) if end_time else None
+        
+        history = []
+        for idx, timestamp in enumerate(self.drift_history['timestamps']):
+            current_time = datetime.fromisoformat(timestamp)
+            
+            if start and current_time < start:
+                continue
+            if end and current_time > end:
+                continue
+
+            entry = {'date': timestamp}
+            
+            # Add metrics for specific feature or all features
+            if feature:
+                if feature in self.drift_history['metrics']:
+                    entry['drift'] = self.drift_history['metrics'][feature][idx]['severity']
+            else:
+                # Average severity across all features
+                severities = [
+                    metrics[idx]['severity'] 
+                    for metrics in self.drift_history['metrics'].values()
+                ]
+                entry['drift'] = sum(severities) / len(severities)
+            
+            history.append(entry)
+            
+        return history
